@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 publish = false
 description = "Focused fork of Rolldown string_wizard with lightweight indices and transactional edits"
-repository = "https://github.com/codeandsolder/string-wizard-fast"
+repository = "https://github.com/codeandsolder/string-wizard-redox"
 
 [dependencies]
 memchr = "2.8.2"

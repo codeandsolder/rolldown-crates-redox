@@ -1,4 +1,4 @@
-# string-wizard-fast
+# string-wizard-redox
 
 A focused standalone fork of Rolldown's `string_wizard` crate.
 
@@ -29,7 +29,7 @@ The imported Rolldown tests are retained. Fork-specific tests cover unsorted bat
 The intended lightweight consumer configuration is:
 
 ```toml
-string_wizard = { git = "https://github.com/codeandsolder/string-wizard-fast.git", rev = "<commit>", default-features = false }
+string_wizard = { git = "https://github.com/codeandsolder/string-wizard-redox.git", rev = "<commit>", default-features = false }
 ```
 
 With default features disabled, the runtime dependency graph contains no `oxc_index`, Rayon, Crossbeam, or Serde.
