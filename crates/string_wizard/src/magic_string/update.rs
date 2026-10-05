@@ -100,8 +100,8 @@ impl<'text> MagicString<'text> {
       }
       if index != 0 && edit.start < previous_end {
         return Err(format!(
-          "overlapping edit range {}..{} follows an edit ending at {}",
-          edit.start, edit.end, previous_end
+          "overlapping edit range {}..{} follows an edit ending at {previous_end}",
+          edit.start, edit.end
         ));
       }
       previous_end = edit.end;
