@@ -10,8 +10,8 @@ internal crates:
   `string_wizard`, with lightweight indices and transactional edit batches.
 - `rolldown_redox`: closely related reusable ECMAScript/source-map utilities
   that are useful outside a bundler and do not deserve separate repositories. It
-  currently includes Rolldown's source-map chain collapsing, line re-anchoring,
-  and source joining machinery with standalone regression coverage.
+  includes source-map chain collapsing/joining plus a feature-gated Oxc parser layer
+  that centralizes parse policy and safely owns source + allocator + AST together.
 
 Upstream-derived code retains its original MIT license and attribution. Fork
 changes should remain narrow, tested, and useful to standalone consumers.

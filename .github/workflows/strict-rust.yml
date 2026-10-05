@@ -16,7 +16,7 @@ jobs:
   strict-rust:
     uses: codeandsolder/rust-skills2/.github/workflows/strict-rust.yml@main
     with:
-      cargo-args: "--locked --workspace --lib"
+      cargo-args: "--locked --workspace --lib --all-features"
 
   tests:
     name: Rust 1.99 tests

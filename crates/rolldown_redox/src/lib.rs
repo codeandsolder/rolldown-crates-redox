@@ -1,6 +1,6 @@
-//! Focused reusable utilities adapted from Rolldown.
-//!
-//! This crate intentionally collects closely related source-processing pieces
-//! in one place instead of mirroring Rolldown's internal crate granularity.
+#![doc = "Focused reusable utilities adapted from Rolldown internals."]
 
+#[cfg(feature = "ecmascript")]
+pub mod ecmascript;
+#[cfg(feature = "sourcemap")]
 pub mod sourcemap;
