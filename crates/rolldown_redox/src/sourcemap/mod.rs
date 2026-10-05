@@ -118,6 +118,149 @@ pub fn collapse_sourcemaps(sourcemap_chain: &[&oxc_sourcemap::SourceMap<'_>]) ->
   )
 }
 
+/// Replaces one source in `downstream` with the sources described by `upstream`.
+///
+/// Unlike [`collapse_sourcemaps`], this is suitable for a bundle map with many source entries:
+/// only tokens that point at `source_id` are traced through `upstream`; every other mapping is
+/// retained and its source index is adjusted around the splice.
+///
+/// Both maps should have `sourceRoot` resolved into their individual `sources` before calling
+/// this function. A single output `sourceRoot` cannot faithfully describe a map whose sources
+/// came from different roots, so the composed map deliberately clears it.
+#[must_use]
+pub fn compose_sourcemap_source(
+  downstream: &oxc_sourcemap::SourceMap<'_>,
+  source_id: u32,
+  upstream: &oxc_sourcemap::SourceMap<'_>,
+) -> SourceMap {
+  let downstream_sources = downstream.get_sources().collect::<Vec<_>>();
+  let upstream_sources = upstream.get_sources().collect::<Vec<_>>();
+  let Ok(source_index) = usize::try_from(source_id) else {
+    return downstream.clone().into_owned();
+  };
+  if source_index >= downstream_sources.len() || upstream_sources.is_empty() {
+    return downstream.clone().into_owned();
+  }
+
+  let downstream_contents = downstream.get_source_contents().collect::<Vec<_>>();
+  let upstream_contents = upstream.get_source_contents().collect::<Vec<_>>();
+  let mut sources = Vec::with_capacity(downstream_sources.len() + upstream_sources.len() - 1);
+  let mut contents = Vec::with_capacity(sources.capacity());
+  for (index, source) in downstream_sources.iter().enumerate() {
+    if index == source_index {
+      sources.extend(upstream_sources.iter().map(|source| Cow::Owned((*source).to_owned())));
+      contents.extend(
+        upstream_contents.iter().map(|content| content.map(|value| Cow::Owned(value.to_owned()))),
+      );
+    } else {
+      sources.push(Cow::Owned((*source).to_owned()));
+      contents.push(
+        downstream_contents.get(index).copied().flatten().map(|value| Cow::Owned(value.to_owned())),
+      );
+    }
+  }
+
+  let downstream_names = downstream.get_names().collect::<Vec<_>>();
+  let upstream_names = upstream.get_names().collect::<Vec<_>>();
+  let mut names = Vec::with_capacity(downstream_names.len() + upstream_names.len());
+  names.extend(downstream_names.iter().map(|name| Cow::Owned((*name).to_owned())));
+  names.extend(upstream_names.iter().map(|name| Cow::Owned((*name).to_owned())));
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "source-map name tables are indexed by u32 and cannot contain more names than the format encodes"
+  )]
+  let upstream_name_offset = downstream_names.len() as u32;
+
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "source-map source tables are indexed by u32 and cannot contain more sources than the format encodes"
+  )]
+  let inserted_source_count = upstream_sources.len() as u32;
+  let source_delta = inserted_source_count - 1;
+  let lookup = upstream.generate_lookup_table();
+  let tokens = downstream
+    .get_tokens()
+    .filter_map(|token| {
+      let Some(token_source_id) = token.get_source_id() else {
+        return Some(token);
+      };
+      if token_source_id < source_id {
+        return Some(token);
+      }
+      if token_source_id > source_id {
+        return Some(Token::new(
+          token.get_dst_line(),
+          token.get_dst_col(),
+          token.get_src_line(),
+          token.get_src_col(),
+          Some(token_source_id + source_delta),
+          token.get_name_id(),
+        ));
+      }
+
+      let traced = upstream.lookup_source_view_token_approx(
+        &lookup,
+        token.get_src_line(),
+        token.get_src_col(),
+      );
+      let Some(traced) = traced.filter(|traced| traced.get_source_id().is_some()) else {
+        return Some(Token::new(token.get_dst_line(), token.get_dst_col(), 0, 0, None, None));
+      };
+      let traced_source_id = traced.get_source_id()?;
+      let name_id =
+        traced.get_name_id().map(|id| id + upstream_name_offset).or_else(|| token.get_name_id());
+      Some(Token::new(
+        token.get_dst_line(),
+        token.get_dst_col(),
+        traced.get_src_line(),
+        traced.get_src_col(),
+        Some(source_id + traced_source_id),
+        name_id,
+      ))
+    })
+    .collect();
+
+  let file = downstream.get_file().map(|file| Cow::Owned(file.to_owned()));
+  let mut composed = SourceMap::new(file, names, None, sources, contents, tokens, None);
+
+  let ignore_list =
+    compose_ignore_list(downstream, upstream, source_id, source_delta, inserted_source_count);
+  if !ignore_list.is_empty() {
+    composed.set_ignore_list(ignore_list);
+  }
+  if let Some(debug_id) = downstream.get_debug_id() {
+    composed.set_debug_id(debug_id);
+  }
+  composed
+}
+
+fn compose_ignore_list(
+  downstream: &oxc_sourcemap::SourceMap<'_>,
+  upstream: &oxc_sourcemap::SourceMap<'_>,
+  source_id: u32,
+  source_delta: u32,
+  inserted_source_count: u32,
+) -> Vec<u32> {
+  let mut ignore_list = Vec::new();
+  if let Some(ids) = downstream.get_ignore_list() {
+    for &id in ids {
+      match id.cmp(&source_id) {
+        std::cmp::Ordering::Less => ignore_list.push(id),
+        std::cmp::Ordering::Equal => {
+          ignore_list.extend(source_id..source_id + inserted_source_count);
+        }
+        std::cmp::Ordering::Greater => ignore_list.push(id + source_delta),
+      }
+    }
+  }
+  if let Some(ids) = upstream.get_ignore_list() {
+    ignore_list.extend(ids.iter().map(|id| source_id + id));
+  }
+  ignore_list.sort_unstable();
+  ignore_list.dedup();
+  ignore_list
+}
+
 /// Remaps `last_map`'s tokens through `chain`, the earlier maps with the nearest one first.
 /// `TRACK_NAMES` is a const so that a chain without names compiles without the name work.
 fn remap_tokens<const TRACK_NAMES: bool>(
