@@ -45,6 +45,10 @@ impl<'a> SourcemapBuilder<'a> {
     self.source_map_builder.add_name(name)
   }
 
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "source and generated source-map coordinates use the upstream u32 representation"
+  )]
   pub fn add_chunk(
     &mut self,
     chunk: &Chunk,
@@ -71,30 +75,17 @@ impl<'a> SourcemapBuilder<'a> {
       let mut new_line = true;
       let mut char_in_hires_boundary = false;
       for char in chunk_content.chars() {
-        match char {
-          '\n' => {
-            loc.bump_line();
-            self.bump_line();
-            new_line = true;
-            // A newline ends the current word run.
-            char_in_hires_boundary = false;
-          }
-          _ => {
-            if new_line || !matches!(self.hires, Hires::False) {
-              if matches!(self.hires, Hires::Boundary) {
-                if char.is_alphanumeric() || char == '_' {
-                  if !char_in_hires_boundary {
-                    self.source_map_builder.add_token(
-                      self.generated_code_line,
-                      self.generated_code_column,
-                      loc.line,
-                      loc.column,
-                      Some(self.source_id),
-                      name_id,
-                    );
-                    char_in_hires_boundary = true;
-                  }
-                } else {
+        if char == '\n' {
+          loc.bump_line();
+          self.bump_line();
+          new_line = true;
+          // A newline ends the current word run.
+          char_in_hires_boundary = false;
+        } else {
+          if new_line || !matches!(self.hires, Hires::False) {
+            if matches!(self.hires, Hires::Boundary) {
+              if char.is_alphanumeric() || char == '_' {
+                if !char_in_hires_boundary {
                   self.source_map_builder.add_token(
                     self.generated_code_line,
                     self.generated_code_column,
@@ -103,7 +94,7 @@ impl<'a> SourcemapBuilder<'a> {
                     Some(self.source_id),
                     name_id,
                   );
-                  char_in_hires_boundary = false;
+                  char_in_hires_boundary = true;
                 }
               } else {
                 self.source_map_builder.add_token(
@@ -114,31 +105,41 @@ impl<'a> SourcemapBuilder<'a> {
                   Some(self.source_id),
                   name_id,
                 );
+                char_in_hires_boundary = false;
               }
+            } else {
+              self.source_map_builder.add_token(
+                self.generated_code_line,
+                self.generated_code_column,
+                loc.line,
+                loc.column,
+                Some(self.source_id),
+                name_id,
+              );
             }
-            let char_utf16_len = char.len_utf16() as u32;
-            loc.column += char_utf16_len;
-            self.generated_code_column += char_utf16_len;
-            new_line = false;
           }
+          let char_utf16_len = char.len_utf16() as u32;
+          loc.column += char_utf16_len;
+          self.generated_code_column += char_utf16_len;
+          new_line = false;
         }
       }
     }
   }
 
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "source-map destination coordinates use the upstream u32 representation"
+  )]
   pub fn advance(&mut self, content: &str) {
     if content.is_empty() {
       return;
     }
-    let mut lines = content.split('\n');
-
-    // SAFETY: In any cases, lines would have at least one element.
-    // "".split('\n') would create `[""]`.
-    // "\n".split('\n') would create `["", ""]`.
-    let last_line = unsafe { lines.next_back().unwrap_unchecked() };
-    for _ in lines {
+    let line_breaks = memchr::memchr_iter(b'\n', content.as_bytes()).count();
+    for _ in 0..line_breaks {
       self.bump_line();
     }
+    let last_line = content.rsplit_once('\n').map_or(content, |(_, tail)| tail);
     // Fast path: ASCII strings have 1:1 byte-to-UTF-16 mapping
     self.generated_code_column += if last_line.is_ascii() {
       last_line.len() as u32
@@ -147,7 +148,7 @@ impl<'a> SourcemapBuilder<'a> {
     };
   }
 
-  fn bump_line(&mut self) {
+  const fn bump_line(&mut self) {
     self.generated_code_line += 1;
     self.generated_code_column = 0;
   }

@@ -3,23 +3,23 @@ use std::collections::VecDeque;
 
 use crate::MagicString;
 
-impl<'text> MagicString<'text> {
+impl MagicString<'_> {
   /// Trims whitespace from the start and end of the string.
   pub fn trim(&mut self, char_type: Option<&str>) -> &mut Self {
-    self.trim_start(char_type);
-    self.trim_end(char_type);
+    let _ = self.trim_start(char_type);
+    let _ = self.trim_end(char_type);
     self
   }
 
   /// Trims whitespace from the start of the string.
   pub fn trim_start(&mut self, char_type: Option<&str>) -> &mut Self {
-    self.trim_start_aborted(char_type);
+    let _ = self.trim_start_aborted(char_type);
     self
   }
 
   /// Trims whitespace from the end of the string.
   pub fn trim_end(&mut self, char_type: Option<&str>) -> &mut Self {
-    self.trim_end_aborted(char_type);
+    let _ = self.trim_end_aborted(char_type);
     self
   }
 
@@ -163,7 +163,7 @@ impl<'text> MagicString<'text> {
 
 /// Trims a deque from the start using the given pattern.
 /// Returns true if any non-empty content remains after trimming.
-fn trim_deque_start<'a>(deque: &mut VecDeque<Cow<'a, str>>, pattern: &str) -> bool {
+fn trim_deque_start(deque: &mut VecDeque<Cow<'_, str>>, pattern: &str) -> bool {
   let old_deque = std::mem::take(deque);
   let mut found_non_match = false;
 
@@ -184,7 +184,7 @@ fn trim_deque_start<'a>(deque: &mut VecDeque<Cow<'a, str>>, pattern: &str) -> bo
 
 /// Trims a deque from the end using the given pattern.
 /// Returns true if any non-empty content remains after trimming.
-fn trim_deque_end<'a>(deque: &mut VecDeque<Cow<'a, str>>, pattern: &str) -> bool {
+fn trim_deque_end(deque: &mut VecDeque<Cow<'_, str>>, pattern: &str) -> bool {
   let old_deque = std::mem::take(deque);
   let mut found_non_match = false;
 
@@ -218,16 +218,8 @@ fn trim_start_pattern<'a>(s: &'a str, pattern: &str) -> &'a str {
 
   // Use regex for custom patterns
   let regex_pattern = format!("^({pattern})+");
-  match regex::Regex::new(&regex_pattern) {
-    Ok(re) => {
-      if let Some(m) = re.find(s) {
-        &s[m.end()..]
-      } else {
-        s
-      }
-    }
-    Err(_) => s.trim_start(), // Fallback to whitespace on invalid regex
-  }
+  regex::Regex::new(&regex_pattern)
+    .map_or_else(|_| s.trim_start(), |re| re.find(s).map_or(s, |m| &s[m.end()..]))
 }
 
 /// Trims characters matching the pattern from the end of the string.
@@ -245,14 +237,6 @@ fn trim_end_pattern<'a>(s: &'a str, pattern: &str) -> &'a str {
 
   // Use regex for custom patterns
   let regex_pattern = format!("({pattern})+$");
-  match regex::Regex::new(&regex_pattern) {
-    Ok(re) => {
-      if let Some(m) = re.find(s) {
-        &s[..m.start()]
-      } else {
-        s
-      }
-    }
-    Err(_) => s.trim_end(), // Fallback to whitespace on invalid regex
-  }
+  regex::Regex::new(&regex_pattern)
+    .map_or_else(|_| s.trim_end(), |re| re.find(s).map_or(s, |m| &s[..m.start()]))
 }

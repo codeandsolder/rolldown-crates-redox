@@ -1,12 +1,15 @@
 use crate::MagicString;
 
-impl<'text> MagicString<'text> {
+impl MagicString<'_> {
   /// Returns the content of the generated string that corresponds to the original
   /// positions from `start` to `end`.
   ///
   /// If `end` is `None`, it defaults to the original string length.
+  ///
+  /// # Errors
+  /// Returns an error when a replaced character would be used as a slice anchor.
   pub fn slice(&self, start: u32, end: Option<u32>) -> Result<String, String> {
-    let original_len = self.source.len() as u32;
+    let original_len = self.source_len;
 
     // Default end to original length
     let end = end.unwrap_or(original_len);
@@ -38,7 +41,7 @@ impl<'text> MagicString<'text> {
 
     let start_chunk = &self.chunks[start_chunk_idx];
     if start_chunk.edited_content.is_some() && start_chunk.start() != start {
-      return Err(format!("Cannot use replaced character {} as slice start anchor.", start));
+      return Err(format!("Cannot use replaced character {start} as slice start anchor."));
     }
 
     let mut chunk_idx = Some(start_chunk_idx);
@@ -47,7 +50,7 @@ impl<'text> MagicString<'text> {
 
       // Add intro if this is not the start chunk, or if chunk.start === start
       if idx != start_chunk_idx || chunk.start() == start {
-        for intro in chunk.intro.iter() {
+        for intro in &chunk.intro {
           result.push_str(intro.as_ref());
         }
       }
@@ -55,16 +58,13 @@ impl<'text> MagicString<'text> {
       let contains_end = chunk.start() < end && chunk.end() >= end;
 
       if contains_end && chunk.edited_content.is_some() && chunk.end() != end {
-        return Err(format!("Cannot use replaced character {} as slice end anchor.", end));
+        return Err(format!("Cannot use replaced character {end} as slice end anchor."));
       }
 
       let slice_start = if idx == start_chunk_idx { (start - chunk.start()) as usize } else { 0 };
 
-      let content = if let Some(ref edited) = chunk.edited_content {
-        edited.as_ref()
-      } else {
-        chunk.span.text(&self.source)
-      };
+      let content =
+        chunk.edited_content.as_deref().unwrap_or_else(|| chunk.span.text(&self.source));
 
       let slice_end = if contains_end {
         // end <= chunk.end() when contains_end is true, so we subtract
@@ -81,7 +81,7 @@ impl<'text> MagicString<'text> {
 
       // Add outro if this chunk doesn't contain the end, or if chunk.end === end
       if !contains_end || chunk.end() == end {
-        for outro in chunk.outro.iter() {
+        for outro in &chunk.outro {
           result.push_str(outro.as_ref());
         }
       }

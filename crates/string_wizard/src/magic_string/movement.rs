@@ -5,6 +5,9 @@ impl MagicString<'_> {
   ///
   /// Unlike `update`/`overwrite`, this iterates by original position (via `chunk_by_start`)
   /// rather than by linked-list order, so it works correctly across moved content.
+  ///
+  /// # Errors
+  /// Returns an error for inverted ranges or when an edit boundary cannot be represented.
   pub fn remove(&mut self, start: u32, end: u32) -> Result<&mut Self, String> {
     if start == end {
       return Ok(self);
@@ -30,6 +33,9 @@ impl MagicString<'_> {
   }
 
   /// Moves the characters from start and end to index. Returns this.
+  ///
+  /// # Errors
+  /// Returns an error for invalid, out-of-bounds, or non-contiguous ranges.
   // `move` is reserved keyword in Rust, so we use `relocate` instead.
   pub fn relocate(&mut self, start: u32, end: u32, to: u32) -> Result<&mut Self, String> {
     if to >= start && to <= end {
@@ -49,7 +55,7 @@ impl MagicString<'_> {
     }
     // Past-the-end positions have no chunk to look up in `chunk_by_end`; indexing the map
     // with one was a panic.
-    if end > self.source.len() as u32 {
+    if end > self.source_len {
       return Err(format!(
         "Cannot move the range ({start}, {end}): it is out of bounds (source length is {})",
         self.source.len()
@@ -99,11 +105,7 @@ impl MagicString<'_> {
       return Ok(self);
     }
 
-    let new_left_idx = new_right_idx
-      .map(|idx| self.chunks[idx].prev)
-      // If the `to` index is at the end of the string, then the `new_right_idx` will be `None`.
-      // In this case, we want to use the last chunk as the left chunk to connect the relocated chunk.
-      .unwrap_or(Some(self.last_chunk_idx));
+    let new_left_idx = new_right_idx.map_or(Some(self.last_chunk_idx), |idx| self.chunks[idx].prev);
 
     // Adjust next/prev pointers, this remove the [start, end] range from the old position
     if let Some(old_left_idx) = old_left_idx {
@@ -154,14 +156,17 @@ impl MagicString<'_> {
 
   /// Returns a clone with content outside the specified range removed.
   /// This is equivalent to `clone().remove(0, start).remove(end, original.len())`.
+  ///
+  /// # Errors
+  /// Propagates range or split errors from [`Self::remove`].
   pub fn snip(&self, start: u32, end: u32) -> Result<Self, String> {
     let mut clone = self.clone();
     if start > 0 {
-      clone.remove(0, start)?;
+      let _ = clone.remove(0, start)?;
     }
-    let original_len = self.source.len() as u32;
+    let original_len = self.source_len;
     if end < original_len {
-      clone.remove(end, original_len)?;
+      let _ = clone.remove(end, original_len)?;
     }
     Ok(clone)
   }

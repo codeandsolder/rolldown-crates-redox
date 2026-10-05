@@ -45,8 +45,10 @@ impl MagicString<'_> {
       source_builder.advance(frag);
     });
 
-    let utf16_index_map =
-      precompute_utf16_index_map(&self.source, self.iter_chunks().map(|chunk| chunk.start()));
+    let utf16_index_map = precompute_utf16_index_map(
+      &self.source,
+      self.iter_chunks().map(super::super::chunk::Chunk::start),
+    );
 
     self.iter_chunks().for_each(|chunk| {
       chunk.intro.iter().for_each(|frag| {
@@ -80,6 +82,10 @@ impl MagicString<'_> {
   }
 }
 
+#[expect(
+  clippy::cast_possible_truncation,
+  reason = "all byte indices and slices originate from MagicString's validated u32 source space"
+)]
 fn precompute_utf16_index_map(
   source: &str,
   byte_indices: impl Iterator<Item = u32>,
@@ -90,7 +96,7 @@ fn precompute_utf16_index_map(
   let mut index: u32 = 0;
   let mut index_utf16: u32 = 0;
   let mut map: FxHashMap<u32, u32> =
-    FxHashMap::with_capacity_and_hasher(byte_indices.len(), Default::default());
+    FxHashMap::with_capacity_and_hasher(byte_indices.len(), rustc_hash::FxBuildHasher);
   for &i in &byte_indices {
     let slice = &source[index as usize..i as usize];
     // Fast path: ASCII strings have 1:1 byte-to-UTF-16 mapping
@@ -100,7 +106,7 @@ fn precompute_utf16_index_map(
       slice.chars().map(|c| c.len_utf16() as u32).sum::<u32>()
     };
     index = i;
-    map.insert(i, index_utf16);
+    let _ = map.insert(i, index_utf16);
   }
   map
 }

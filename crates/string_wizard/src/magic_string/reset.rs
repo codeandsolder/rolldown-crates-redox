@@ -1,6 +1,6 @@
 use crate::MagicString;
 
-impl<'text> MagicString<'text> {
+impl MagicString<'_> {
   /// Resets the portion of the string from `start` to `end` to its original content.
   /// This undoes any modifications (updates, overwrites, intro/outro additions) made to that range.
   ///

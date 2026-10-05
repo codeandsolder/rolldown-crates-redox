@@ -7,7 +7,7 @@ struct ExcludeSet<'a> {
 }
 
 impl<'a> ExcludeSet<'a> {
-  fn new(exclude: &'a [(u32, u32)]) -> Self {
+  const fn new(exclude: &'a [(u32, u32)]) -> Self {
     Self { exclude }
   }
 
@@ -46,7 +46,7 @@ pub fn guess_indentor(source: &str) -> Option<String> {
 
 #[derive(Debug, Default)]
 pub struct IndentOptions<'a, 'b> {
-  /// MagicString will guess the `indentor` from lines of the source if passed `None`.
+  /// `MagicString` will guess the `indentor` from lines of the source if passed `None`.
   pub indentor: Option<&'a str>,
 
   /// Half-open `[start, end)` source-offset ranges (as in `magic-string`) whose characters
@@ -70,8 +70,16 @@ impl MagicString<'_> {
 
   /// # Errors
   /// See [`Self::indent`].
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "the small options value is part of the upstream-compatible public API"
+  )]
+  #[expect(
+    clippy::items_after_statements,
+    reason = "the tiny helper types are intentionally scoped to indentation implementation"
+  )]
   pub fn indent_with(&mut self, opts: IndentOptions) -> Result<&mut Self, String> {
-    if opts.indentor.is_some_and(|s| s.is_empty()) {
+    if opts.indentor.is_some_and(str::is_empty) {
       return Ok(self);
     }
     struct IndentReplacer {
@@ -98,8 +106,8 @@ impl MagicString<'_> {
     let mut indent_replacer =
       IndentReplacer { should_indent_next_char: true, indentor: indentor.to_string() };
 
-    for intro_frag in self.intro.iter_mut() {
-      indent_frag(intro_frag, &mut indent_replacer)
+    for intro_frag in &mut self.intro {
+      indent_frag(intro_frag, &mut indent_replacer);
     }
 
     let exclude_set = ExcludeSet::new(opts.exclude);
@@ -129,16 +137,16 @@ impl MagicString<'_> {
               line_starts.push(char_index);
             }
           }
-          char_index += char.len_utf8() as u32;
+          char_index += u32::try_from(char.len_utf8()).map_err(|_| "invalid UTF-8 scalar width")?;
         }
         for line_start in line_starts {
-          self.prepend_right(line_start, indent_replacer.indentor.clone())?;
+          let _ = self.prepend_right(line_start, indent_replacer.indentor.clone())?;
         }
       }
     }
 
-    for frag in self.outro.iter_mut() {
-      indent_frag(frag, &mut indent_replacer)
+    for frag in &mut self.outro {
+      indent_frag(frag, &mut indent_replacer);
     }
 
     Ok(self)

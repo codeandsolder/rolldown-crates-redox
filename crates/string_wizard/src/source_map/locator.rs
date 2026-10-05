@@ -5,6 +5,10 @@ pub struct Locator {
 }
 
 impl Locator {
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "Locator is constructed for MagicString sources bounded to u32 offsets"
+  )]
   pub fn new(source: &str) -> Self {
     let mut line_offsets = vec![];
     let mut line_start_pos: u32 = 0;
@@ -22,11 +26,15 @@ impl Locator {
   }
 
   /// Pass the index based on utf-16 and return the [Location] based on utf-16
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "the line table cannot contain more entries than the bounded source has bytes"
+  )]
   pub fn locate(&self, index: u32) -> Location {
     let mut left_cursor = 0;
     let mut right_cursor = self.line_offsets.len();
     while left_cursor < right_cursor {
-      let mid = (left_cursor + right_cursor) >> 1;
+      let mid = usize::midpoint(left_cursor, right_cursor);
       if index < self.line_offsets[mid] {
         right_cursor = mid;
       } else {
@@ -39,7 +47,7 @@ impl Locator {
   }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Location {
   pub line: u32,
   // columns are calculated based on utf-16
@@ -47,7 +55,7 @@ pub struct Location {
 }
 
 impl Location {
-  pub fn bump_line(&mut self) {
+  pub const fn bump_line(&mut self) {
     self.line += 1;
     self.column = 0;
   }

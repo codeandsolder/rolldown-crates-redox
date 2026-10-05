@@ -34,6 +34,7 @@ pub struct MagicString<'s> {
   intro: VecDeque<CowStr<'s>>,
   outro: VecDeque<CowStr<'s>>,
   source: Cow<'s, str>,
+  source_len: u32,
   chunks: IndexChunks<'s>,
   first_chunk_idx: ChunkIdx,
   last_chunk_idx: ChunkIdx,
@@ -58,19 +59,44 @@ impl Default for MagicString<'_> {
 }
 
 impl<'text> MagicString<'text> {
+  /// Creates a `MagicString` over `source`.
+  ///
+  /// # Panics
+  /// Panics when `source` is larger than the format's 32-bit source-offset space.
   pub fn new(source: impl Into<Cow<'text, str>>) -> Self {
-    Self::try_new(source).expect("MagicString does not support sources larger than 4GB")
+    Self::with_options(source, MagicStringOptions::default())
   }
 
+  /// Fallible variant of [`Self::new`].
+  ///
+  /// # Errors
+  /// Returns an error when `source` is larger than the 32-bit source-offset space.
   pub fn try_new(source: impl Into<Cow<'text, str>>) -> Result<Self, String> {
-    Self::try_with_options(source, Default::default())
+    Self::try_with_options(source, MagicStringOptions::default())
   }
 
+  /// Creates a `MagicString` with explicit options.
+  ///
+  /// # Panics
+  /// Panics when `source` is larger than the format's 32-bit source-offset space.
   pub fn with_options(source: impl Into<Cow<'text, str>>, options: MagicStringOptions) -> Self {
-    Self::try_with_options(source, options)
-      .expect("MagicString does not support sources larger than 4GB")
+    let source = source.into();
+    assert!(
+      u32::try_from(source.len()).is_ok(),
+      "MagicString does not support sources larger than 4GB"
+    );
+    #[expect(
+      clippy::cast_possible_truncation,
+      reason = "the preceding bound check proves the byte length fits in u32"
+    )]
+    let source_len = source.len() as u32;
+    Self::from_validated_source(source, source_len, options)
   }
 
+  /// Fallible constructor with explicit options.
+  ///
+  /// # Errors
+  /// Returns an error when `source` is larger than the 32-bit source-offset space.
   pub fn try_with_options(
     source: impl Into<Cow<'text, str>>,
     options: MagicStringOptions,
@@ -78,29 +104,38 @@ impl<'text> MagicString<'text> {
     let source = source.into();
     let source_len = u32::try_from(source.len())
       .map_err(|_| "MagicString does not support sources larger than 4GB".to_string())?;
+    Ok(Self::from_validated_source(source, source_len, options))
+  }
+
+  fn from_validated_source(
+    source: Cow<'text, str>,
+    source_len: u32,
+    options: MagicStringOptions,
+  ) -> Self {
     let initial_chunk = Chunk::new(Span(0, source_len));
-    let mut chunks = IndexChunks::with_capacity(1);
-    let initial_chunk_idx = chunks.push(initial_chunk);
+    let chunks = IndexChunks::with_capacity(1);
+    let initial_chunk_idx = ChunkIdx::first();
     let mut magic_string = Self {
-      intro: Default::default(),
-      outro: Default::default(),
+      intro: VecDeque::default(),
+      outro: VecDeque::default(),
       source,
+      source_len,
       first_chunk_idx: initial_chunk_idx,
       last_chunk_idx: initial_chunk_idx,
       chunks,
-      chunk_by_start: Default::default(),
-      chunk_by_end: Default::default(),
+      chunk_by_start: FxHashMap::default(),
+      chunk_by_end: FxHashMap::default(),
       filename: options.filename,
       ignore_list: options.ignore_list,
       guessed_indentor: OnceLock::default(),
       stored_names: FxHashMap::default(),
       last_searched_chunk_idx: initial_chunk_idx,
     };
-
-    magic_string.chunk_by_start.insert(0, initial_chunk_idx);
-    magic_string.chunk_by_end.insert(source_len, initial_chunk_idx);
-
-    Ok(magic_string)
+    // Populate the single initial chunk without a fallible index conversion: index 0 is encoded as 1.
+    magic_string.chunks = IndexChunks::from_initial(initial_chunk);
+    let _ = magic_string.chunk_by_start.insert(0, initial_chunk_idx);
+    let _ = magic_string.chunk_by_end.insert(source_len, initial_chunk_idx);
+    magic_string
   }
 
   pub fn source(&self) -> &str {
@@ -111,7 +146,7 @@ impl<'text> MagicString<'text> {
     self.filename.as_deref()
   }
 
-  pub fn ignore_list(&self) -> bool {
+  pub const fn ignore_list(&self) -> bool {
     self.ignore_list
   }
 
@@ -122,7 +157,7 @@ impl<'text> MagicString<'text> {
   /// Note this counts *bytes*. Callers that need the length JavaScript would report (UTF-16
   /// code units, as the reference `magic-string` returns) must use [`Self::len_utf16`].
   pub fn len(&self) -> usize {
-    self.iter_chunks().flat_map(|c| c.fragments(&self.source)).map(|f| f.len()).sum()
+    self.iter_chunks().flat_map(|c| c.fragments(&self.source)).map(str::len).sum()
   }
 
   /// Returns the length in UTF-16 code units of the content within chunks, excluding the
@@ -184,11 +219,8 @@ impl<'text> MagicString<'text> {
       }
 
       // Check chunk content (edited or original)
-      let content = chunk
-        .edited_content
-        .as_ref()
-        .map(|s| s.as_ref())
-        .unwrap_or_else(|| chunk.span.text(&self.source));
+      let content =
+        chunk.edited_content.as_ref().map_or_else(|| chunk.span.text(&self.source), AsRef::as_ref);
       if let Some(c) = content.chars().next_back() {
         return Some(c);
       }
@@ -219,7 +251,7 @@ impl<'text> MagicString<'text> {
     // the first newline that completes the last line; earlier sections are never touched.
     let mut pieces: Vec<&str> = Vec::new();
     'done: {
-      if Self::scan_last_line(self.outro.iter().rev().map(|s| s.as_ref()), &mut pieces) {
+      if Self::scan_last_line(self.outro.iter().rev().map(AsRef::as_ref), &mut pieces) {
         break 'done;
       }
       let mut chunk_idx = Some(self.last_chunk_idx);
@@ -228,17 +260,16 @@ impl<'text> MagicString<'text> {
         let content = chunk
           .edited_content
           .as_ref()
-          .map(|s| s.as_ref())
-          .unwrap_or_else(|| chunk.span.text(&self.source));
-        let fragments = (chunk.outro.iter().rev().map(|s| s.as_ref()))
+          .map_or_else(|| chunk.span.text(&self.source), AsRef::as_ref);
+        let fragments = (chunk.outro.iter().rev().map(AsRef::as_ref))
           .chain(std::iter::once(content))
-          .chain(chunk.intro.iter().rev().map(|s| s.as_ref()));
+          .chain(chunk.intro.iter().rev().map(AsRef::as_ref));
         if Self::scan_last_line(fragments, &mut pieces) {
           break 'done;
         }
         chunk_idx = chunk.prev;
       }
-      Self::scan_last_line(self.intro.iter().rev().map(|s| s.as_ref()), &mut pieces);
+      let _ = Self::scan_last_line(self.intro.iter().rev().map(AsRef::as_ref), &mut pieces);
     }
     let mut last_line = String::with_capacity(pieces.iter().map(|piece| piece.len()).sum());
     pieces.iter().rev().for_each(|piece| last_line.push_str(piece));
@@ -284,7 +315,7 @@ impl<'text> MagicString<'text> {
     if !self.stored_names.contains_key(original) {
       #[expect(clippy::cast_possible_truncation, reason = "a source has < u32::MAX edits")]
       let next_id = self.stored_names.len() as u32;
-      self.stored_names.insert(original.to_string(), next_id);
+      let _ = self.stored_names.insert(original.to_string(), next_id);
     }
   }
 
@@ -311,8 +342,8 @@ impl<'text> MagicString<'text> {
   }
 
   pub(crate) fn fragments(&'text self) -> impl Iterator<Item = &'text str> {
-    let intro = self.intro.iter().map(|s| s.as_ref());
-    let outro = self.outro.iter().map(|s| s.as_ref());
+    let intro = self.intro.iter().map(AsRef::as_ref);
+    let outro = self.outro.iter().map(AsRef::as_ref);
     let chunks = self.iter_chunks().flat_map(|c| c.fragments(&self.source));
     intro.chain(chunks).chain(outro)
   }
@@ -323,7 +354,7 @@ impl<'text> MagicString<'text> {
   ///
   /// Chunk{span: (0, 7)} => "abcdefg"
   ///
-  /// split_at(3) would create
+  /// `split_at(3)` would create
   ///
   /// Chunk{span: (0, 3)} => "abc"
   /// Chunk{span: (3, 7)} => "defg"
@@ -354,16 +385,16 @@ impl<'text> MagicString<'text> {
 
     let second_half_chunk = self.chunks[candidate_idx].split(at_index)?;
     let second_half_span = second_half_chunk.span;
-    let second_half_idx = self.chunks.push(second_half_chunk);
+    let second_half_idx = self.chunks.push(second_half_chunk)?;
     let first_half_idx = candidate_idx;
 
     // Update the last searched chunk
     self.last_searched_chunk_idx = first_half_idx;
 
     // Update the chunk_by_start/end maps
-    self.chunk_by_end.insert(at_index, first_half_idx);
-    self.chunk_by_start.insert(at_index, second_half_idx);
-    self.chunk_by_end.insert(second_half_span.end(), second_half_idx);
+    let _ = self.chunk_by_end.insert(at_index, first_half_idx);
+    let _ = self.chunk_by_start.insert(at_index, second_half_idx);
+    let _ = self.chunk_by_end.insert(second_half_span.end(), second_half_idx);
 
     // Make sure the new chunk and the old chunk have correct next/prev pointers
     self.chunks[second_half_idx].next = self.chunks[first_half_idx].next;
@@ -373,7 +404,7 @@ impl<'text> MagicString<'text> {
     self.chunks[second_half_idx].prev = Some(first_half_idx);
     self.chunks[first_half_idx].next = Some(second_half_idx);
     if first_half_idx == self.last_chunk_idx {
-      self.last_chunk_idx = second_half_idx
+      self.last_chunk_idx = second_half_idx;
     }
     Ok(())
   }
@@ -402,10 +433,13 @@ impl<'text> MagicString<'text> {
   }
 }
 
-#[expect(clippy::to_string_trait_impl)] // `impl Display` causes extra allocation
+#[expect(
+  clippy::to_string_trait_impl,
+  reason = "Display would require an additional output allocation"
+)]
 impl ToString for MagicString<'_> {
   fn to_string(&self) -> String {
-    let size_hint = self.fragments().map(|f| f.len()).sum();
+    let size_hint = self.fragments().map(str::len).sum();
     let mut ret = String::with_capacity(size_hint);
     self.fragments().for_each(|f| ret.push_str(f));
     ret

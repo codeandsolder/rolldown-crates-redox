@@ -6,12 +6,20 @@ use crate::{CowStr, span::Span};
 pub struct ChunkIdx(NonZeroU32);
 
 impl ChunkIdx {
-  pub(crate) fn from_usize(index: usize) -> Self {
-    let encoded = u32::try_from(index + 1).expect("chunk index exceeds the 4GB source limit");
-    Self(NonZeroU32::new(encoded).expect("chunk indices are encoded one-based"))
+  pub(crate) fn from_usize(index: usize) -> Result<Self, String> {
+    let encoded = index
+      .checked_add(1)
+      .and_then(|value| u32::try_from(value).ok())
+      .and_then(NonZeroU32::new)
+      .ok_or_else(|| "chunk index exceeds the 4GB source limit".to_string())?;
+    Ok(Self(encoded))
   }
 
-  pub(crate) fn as_usize(self) -> usize {
+  pub(crate) const fn first() -> Self {
+    Self(NonZeroU32::MIN)
+  }
+
+  pub(crate) const fn as_usize(self) -> usize {
     self.0.get() as usize - 1
   }
 }
@@ -47,35 +55,35 @@ impl Chunk<'_> {
 }
 
 impl<'str> Chunk<'str> {
-  pub fn start(&self) -> u32 {
+  pub const fn start(&self) -> u32 {
     self.span.start()
   }
 
-  pub fn end(&self) -> u32 {
+  pub const fn end(&self) -> u32 {
     self.span.end()
   }
 
-  pub fn contains(&self, text_index: u32) -> bool {
+  pub const fn contains(&self, text_index: u32) -> bool {
     self.start() < text_index && text_index < self.end()
   }
 
   pub fn append_outro(&mut self, content: CowStr<'str>) {
-    self.outro.push_back(content)
+    self.outro.push_back(content);
   }
 
   pub fn append_intro(&mut self, content: CowStr<'str>) {
-    self.intro.push_back(content)
+    self.intro.push_back(content);
   }
 
   pub fn prepend_outro(&mut self, content: CowStr<'str>) {
-    self.outro.push_front(content)
+    self.outro.push_front(content);
   }
 
   pub fn prepend_intro(&mut self, content: CowStr<'str>) {
-    self.intro.push_front(content)
+    self.intro.push_front(content);
   }
 
-  pub fn split<'a>(&'a mut self, text_index: u32) -> Result<Chunk<'str>, String> {
+  pub fn split(&mut self, text_index: u32) -> Result<Self, String> {
     if let Some(ref content) = self.edited_content
       && !content.is_empty()
     {
@@ -94,13 +102,10 @@ impl<'str> Chunk<'str> {
   }
 
   pub fn fragments(&'str self, original_source: &'str str) -> impl Iterator<Item = &'str str> {
-    let intro_iter = self.intro.iter().map(|frag| frag.as_ref());
-    let source_frag = self
-      .edited_content
-      .as_ref()
-      .map(|s| s.as_ref())
-      .unwrap_or_else(|| self.span.text(original_source));
-    let outro_iter = self.outro.iter().map(|frag| frag.as_ref());
+    let intro_iter = self.intro.iter().map(AsRef::as_ref);
+    let source_frag =
+      self.edited_content.as_ref().map_or_else(|| self.span.text(original_source), AsRef::as_ref);
+    let outro_iter = self.outro.iter().map(AsRef::as_ref);
     intro_iter.chain(Some(source_frag)).chain(outro_iter)
   }
 
@@ -113,7 +118,7 @@ impl<'str> Chunk<'str> {
     self.edited_content = Some(content);
   }
 
-  pub fn is_edited(&self) -> bool {
+  pub const fn is_edited(&self) -> bool {
     self.edited_content.is_some()
   }
 

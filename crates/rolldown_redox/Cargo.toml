@@ -1,0 +1,19 @@
+[package]
+name = "rolldown_redox"
+version = "0.1.0"
+description = "Focused reusable Rolldown-derived ECMAScript and source-map utilities"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+memchr = "2.8.2"
+oxc_sourcemap = "9.0.0"
+
+[dev-dependencies]
+serde_json = "1.0.145"

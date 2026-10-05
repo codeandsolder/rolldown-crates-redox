@@ -19,10 +19,14 @@ impl Default for ReplaceOptions {
 }
 
 impl<'text> MagicString<'text> {
+  /// # Errors
+  /// Propagates errors from [`Self::replace_with`].
   pub fn replace(&mut self, from: &str, to: impl Into<CowStr<'text>>) -> Result<&mut Self, String> {
-    self.replace_with(from, to, Default::default())
+    self.replace_with(from, to, ReplaceOptions::default())
   }
 
+  /// # Errors
+  /// Propagates errors from [`Self::replace_with`].
   pub fn replace_all(
     &mut self,
     from: &str,
@@ -31,6 +35,16 @@ impl<'text> MagicString<'text> {
     self.replace_with(from, to, ReplaceOptions { count: usize::MAX, ..Default::default() })
   }
 
+  /// # Errors
+  /// Returns an error when a matched source range cannot be updated safely.
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "the small options value is part of the upstream-compatible public API"
+  )]
+  #[expect(
+    clippy::cast_possible_truncation,
+    reason = "match offsets are bounded by MagicString's validated 32-bit source length"
+  )]
   pub fn replace_with(
     &mut self,
     from: &str,
@@ -43,7 +57,7 @@ impl<'text> MagicString<'text> {
       .map(|start| (start as u32, (start + from.len()) as u32))
       .collect::<Vec<_>>();
     for (match_start, end) in matches {
-      self.update_with(
+      let _ = self.update_with(
         match_start,
         end,
         to.clone(),

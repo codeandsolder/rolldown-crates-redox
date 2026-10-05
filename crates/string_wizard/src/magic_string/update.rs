@@ -35,16 +35,21 @@ impl<'text> TextEdit<'text> {
 }
 
 impl<'text> MagicString<'text> {
-  /// A shorthand for `update_with(start, end, content, Default::default())`;
+  /// A shorthand for `update_with(start, end, content, UpdateOptions::default())`.
+  ///
+  /// # Errors
+  /// Returns an error when the requested source range cannot be updated safely.
   pub fn update(
     &mut self,
     start: u32,
     end: u32,
     content: impl Into<CowStr<'text>>,
   ) -> Result<&mut Self, String> {
-    self.update_with(start, end, content, Default::default())
+    self.update_with(start, end, content, UpdateOptions::default())
   }
 
+  /// # Errors
+  /// Returns an error when the requested source range cannot be updated safely.
   pub fn update_with(
     &mut self,
     start: u32,
@@ -60,6 +65,9 @@ impl<'text> MagicString<'text> {
   /// Edits use UTF-8 byte offsets and may be provided in any order. All ranges
   /// are checked before mutation; if validation or any update fails, `self`
   /// remains unchanged.
+  ///
+  /// # Errors
+  /// Returns an error for invalid, overlapping, out-of-bounds, or unrepresentable edits.
   pub fn apply_edits(
     &mut self,
     edits: impl IntoIterator<Item = TextEdit<'text>>,
@@ -105,7 +113,7 @@ impl<'text> MagicString<'text> {
         .map_err(|_| format!("edit start {} exceeds the 4GB source limit", edit.start))?;
       let end = u32::try_from(edit.end)
         .map_err(|_| format!("edit end {} exceeds the 4GB source limit", edit.end))?;
-      staged.update_with(start, end, edit.content, edit.options)?;
+      let _ = staged.update_with(start, end, edit.content, edit.options)?;
     }
     *self = staged;
     Ok(self)
@@ -113,6 +121,10 @@ impl<'text> MagicString<'text> {
 
   // --- private
 
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "the small options value is consumed only through copyable policy fields"
+  )]
   pub(super) fn inner_update_with(
     &mut self,
     start: u32,
@@ -139,8 +151,16 @@ impl<'text> MagicString<'text> {
       self.store_name(start, end);
     }
 
-    let start_idx = self.chunk_by_start.get(&start).copied().unwrap();
-    let end_idx = self.chunk_by_end.get(&end).copied().unwrap();
+    let start_idx = self
+      .chunk_by_start
+      .get(&start)
+      .copied()
+      .ok_or_else(|| format!("missing chunk boundary at update start {start}"))?;
+    let end_idx = self
+      .chunk_by_end
+      .get(&end)
+      .copied()
+      .ok_or_else(|| format!("missing chunk boundary at update end {end}"))?;
 
     if start_idx != end_idx {
       // When the update range spans multiple chunks, we need to:
@@ -171,7 +191,7 @@ impl<'text> MagicString<'text> {
         // Interior chunks always clear intro/outro (`Default` has `overwrite: true`),
         // matching JS magic-string where `chunk.edit('', false)` passes
         // `contentOnly=undefined` (falsy), so intro/outro are always cleared.
-        self.chunks[chunk_idx].edit("".into(), Default::default());
+        self.chunks[chunk_idx].edit("".into(), EditOptions::default());
 
         if chunk_idx == end_idx {
           break;
