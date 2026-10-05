@@ -32,6 +32,21 @@ impl<'text> TextEdit<'text> {
   ) -> Self {
     Self { start, end, content: content.into(), options }
   }
+
+  /// Insert content before the original-source byte at `offset`.
+  ///
+  /// Multiple insertions at the same offset preserve their input order when
+  /// passed to [`MagicString::apply_edits`].
+  #[must_use]
+  pub fn insert(offset: usize, content: impl Into<Cow<'text, str>>) -> Self {
+    Self::new(offset, offset, content)
+  }
+
+  /// Remove the original-source range `start..end`.
+  #[must_use]
+  pub fn remove(start: usize, end: usize) -> Self {
+    Self::new(start, end, "")
+  }
 }
 
 impl<'text> MagicString<'text> {
@@ -62,9 +77,14 @@ impl<'text> MagicString<'text> {
 
   /// Applies a set of non-overlapping original-source edits atomically.
   ///
-  /// Edits use UTF-8 byte offsets and may be provided in any order. All ranges
-  /// are checked before mutation; if validation or any update fails, `self`
-  /// remains unchanged.
+  /// Edits use UTF-8 byte offsets and may be provided in any order. A
+  /// zero-length range is an insertion before the original-source byte at that
+  /// offset. Insertions may share an offset and may sit exactly on a replacement
+  /// boundary, but an insertion strictly inside a replaced range is rejected.
+  /// Multiple insertions at one offset preserve caller order.
+  ///
+  /// All ranges are checked before mutation; if validation or any update fails,
+  /// `self` remains unchanged.
   ///
   /// # Errors
   /// Returns an error for invalid, overlapping, out-of-bounds, or unrepresentable edits.
@@ -73,14 +93,18 @@ impl<'text> MagicString<'text> {
     edits: impl IntoIterator<Item = TextEdit<'text>>,
   ) -> Result<&mut Self, String> {
     let mut edits = edits.into_iter().collect::<Vec<_>>();
-    edits.sort_unstable_by_key(|edit| (edit.start, edit.end));
+    // Stable sorting preserves caller order for multiple insertions at one
+    // source offset. Sorting by end puts an insertion before a replacement
+    // beginning at the same offset, which gives intuitive "insert before"
+    // semantics and keeps the insertion outside the replaced range.
+    edits.sort_by_key(|edit| (edit.start, edit.end));
 
     let source = self.source();
     let mut previous_end = 0usize;
     for (index, edit) in edits.iter().enumerate() {
-      if edit.start >= edit.end {
+      if edit.start > edit.end {
         return Err(format!(
-          "end must be greater than start, got start: {}, end: {}",
+          "end must be greater than or equal to start, got start: {}, end: {}",
           edit.start, edit.end
         ));
       }
@@ -111,6 +135,10 @@ impl<'text> MagicString<'text> {
     for edit in edits {
       let start = u32::try_from(edit.start)
         .map_err(|_| format!("edit start {} exceeds the 4GB source limit", edit.start))?;
+      if edit.start == edit.end {
+        let _ = staged.append_left(start, edit.content)?;
+        continue;
+      }
       let end = u32::try_from(edit.end)
         .map_err(|_| format!("edit end {} exceeds the 4GB source limit", edit.end))?;
       let _ = staged.update_with(start, end, edit.content, edit.options)?;

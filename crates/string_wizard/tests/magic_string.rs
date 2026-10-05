@@ -567,6 +567,36 @@ mod transactional_edits {
   }
 
   #[test]
+  fn supports_ordered_insertions_and_removals() {
+    let mut s = MagicString::new("abcdef");
+    s.apply_edits([
+      TextEdit::insert(2, "<"),
+      TextEdit::insert(2, ">"),
+      TextEdit::remove(2, 4),
+      TextEdit::insert(4, "!"),
+    ])
+    .unwrap();
+    assert_eq!(s.to_string(), "ab<>!ef");
+  }
+
+  #[test]
+  fn rejects_insertions_inside_replaced_ranges() {
+    let mut s = MagicString::new("abcdef");
+    let before = s.to_string();
+    let err = s.apply_edits([TextEdit::new(1, 5, "X"), TextEdit::insert(3, "!")]).unwrap_err();
+    assert!(err.contains("overlapping edit range"), "unexpected error: {err}");
+    assert_eq!(s.to_string(), before);
+  }
+
+  #[test]
+  fn allows_insertions_at_replacement_boundaries() {
+    let mut s = MagicString::new("abcdef");
+    s.apply_edits([TextEdit::insert(1, "<"), TextEdit::new(1, 5, "X"), TextEdit::insert(5, ">")])
+      .unwrap();
+    assert_eq!(s.to_string(), "a<X>f");
+  }
+
+  #[test]
   fn rejects_overlap_without_mutating() {
     let mut s = MagicString::new("abcdefgh");
     let before = s.to_string();

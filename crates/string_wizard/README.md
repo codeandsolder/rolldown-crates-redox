@@ -17,6 +17,7 @@ The fork deliberately keeps its delta narrow:
 - replace `oxc_index::IndexVec` with a tiny local chunk-indexed `Vec`; the crate only used `oxc_index` for chunk IDs/storage, while the Rolldown workspace's published dependency features pulled in Rayon and Serde for standalone consumers;
 - add `MagicString::try_new` / `try_with_options` so the 32-bit source-offset limit is checked in release builds instead of only by a debug assertion;
 - add `TextEdit` and `MagicString::apply_edits` for atomic batches of non-overlapping edits expressed in ordinary `usize` UTF-8 byte offsets;
+- support ordered zero-length insertions plus explicit `TextEdit::insert` / `TextEdit::remove` constructors; insertions may share offsets and sit on replacement boundaries, but cannot occur inside a replaced range;
 - validate complete batches before mutation: range ordering, source bounds, UTF-8 character boundaries, and overlap;
 - stage a batch on a clone, so an edit-engine failure leaves the original `MagicString` unchanged.
 
