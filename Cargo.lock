@@ -681,6 +681,7 @@ dependencies = [
  "oxc_parser",
  "oxc_sourcemap",
  "oxc_span",
+ "oxc_syntax",
  "self_cell",
  "serde_json",
 ]

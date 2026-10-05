@@ -1,3 +1,5 @@
+#![cfg(feature = "sourcemap")]
+
 use std::borrow::Cow;
 
 use oxc_sourcemap::Token;

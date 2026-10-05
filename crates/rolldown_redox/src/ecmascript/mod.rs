@@ -4,6 +4,12 @@
 //! consumers. [`OwnedProgram`] keeps source text, allocator, and AST together
 //! so a parsed program can safely cross function and stage boundaries.
 
+mod dynamic_import_glob;
+
+pub use dynamic_import_glob::{
+  DynamicImportGlobError, dynamic_import_to_glob, has_special_dynamic_import_query,
+};
+
 use std::{error::Error, fmt, sync::Arc};
 
 use oxc_allocator::Allocator;
