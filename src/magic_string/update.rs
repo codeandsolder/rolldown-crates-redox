@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{CowStr, MagicString, chunk::EditOptions};
 
 #[derive(Debug, Default, Clone)]
@@ -7,6 +9,29 @@ pub struct UpdateOptions {
 
   /// `true` will clear the `intro` and `outro` for the corresponding range.
   pub overwrite: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TextEdit<'text> {
+  pub start: usize,
+  pub end: usize,
+  pub content: Cow<'text, str>,
+  pub options: UpdateOptions,
+}
+
+impl<'text> TextEdit<'text> {
+  pub fn new(start: usize, end: usize, content: impl Into<Cow<'text, str>>) -> Self {
+    Self { start, end, content: content.into(), options: UpdateOptions::default() }
+  }
+
+  pub fn with_options(
+    start: usize,
+    end: usize,
+    content: impl Into<Cow<'text, str>>,
+    options: UpdateOptions,
+  ) -> Self {
+    Self { start, end, content: content.into(), options }
+  }
 }
 
 impl<'text> MagicString<'text> {
@@ -28,6 +53,62 @@ impl<'text> MagicString<'text> {
     opts: UpdateOptions,
   ) -> Result<&mut Self, String> {
     self.inner_update_with(start, end, content.into(), opts, true)
+  }
+
+  /// Applies a set of non-overlapping original-source edits atomically.
+  ///
+  /// Edits use UTF-8 byte offsets and may be provided in any order. All ranges
+  /// are checked before mutation; if validation or any update fails, `self`
+  /// remains unchanged.
+  pub fn apply_edits(
+    &mut self,
+    edits: impl IntoIterator<Item = TextEdit<'text>>,
+  ) -> Result<&mut Self, String> {
+    let mut edits = edits.into_iter().collect::<Vec<_>>();
+    edits.sort_unstable_by_key(|edit| (edit.start, edit.end));
+
+    let source = self.source();
+    let mut previous_end = 0usize;
+    for (index, edit) in edits.iter().enumerate() {
+      if edit.start >= edit.end {
+        return Err(format!(
+          "end must be greater than start, got start: {}, end: {}",
+          edit.start, edit.end
+        ));
+      }
+      if edit.end > source.len() {
+        return Err(format!(
+          "edit range {}..{} exceeds source length {}",
+          edit.start,
+          edit.end,
+          source.len()
+        ));
+      }
+      if !source.is_char_boundary(edit.start) || !source.is_char_boundary(edit.end) {
+        return Err(format!(
+          "edit range {}..{} is not on UTF-8 character boundaries",
+          edit.start, edit.end
+        ));
+      }
+      if index != 0 && edit.start < previous_end {
+        return Err(format!(
+          "overlapping edit range {}..{} follows an edit ending at {}",
+          edit.start, edit.end, previous_end
+        ));
+      }
+      previous_end = edit.end;
+    }
+
+    let mut staged = self.clone();
+    for edit in edits {
+      let start = u32::try_from(edit.start)
+        .map_err(|_| format!("edit start {} exceeds the 4GB source limit", edit.start))?;
+      let end = u32::try_from(edit.end)
+        .map_err(|_| format!("edit end {} exceeds the 4GB source limit", edit.end))?;
+      staged.update_with(start, end, edit.content, edit.options)?;
+    }
+    *self = staged;
+    Ok(self)
   }
 
   // --- private

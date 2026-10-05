@@ -1,9 +1,19 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, num::NonZeroU32};
 
 use crate::{CowStr, span::Span};
 
-oxc_index::define_index_type! {
-    pub struct ChunkIdx = u32;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ChunkIdx(NonZeroU32);
+
+impl ChunkIdx {
+  pub(crate) fn from_usize(index: usize) -> Self {
+    let encoded = u32::try_from(index + 1).expect("chunk index exceeds the 4GB source limit");
+    Self(NonZeroU32::new(encoded).expect("chunk indices are encoded one-based"))
+  }
+
+  pub(crate) fn as_usize(self) -> usize {
+    self.0.get() as usize - 1
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -116,5 +126,15 @@ impl<'str> Chunk<'str> {
       self.edited_content = None;
       self.keep_in_mappings = false;
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn optional_chunk_index_stays_compact() {
+    assert_eq!(std::mem::size_of::<Option<ChunkIdx>>(), std::mem::size_of::<u32>());
   }
 }

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use string_wizard::IndentOptions;
 use string_wizard::MagicString;
 use string_wizard::MagicStringOptions;
-use string_wizard::UpdateOptions;
+use string_wizard::{TextEdit, UpdateOptions};
 
 trait MagicStringExt<'text> {
   fn overwrite(&mut self, start: u32, end: u32, content: impl Into<Cow<'text, str>>) -> &mut Self;
@@ -549,5 +549,52 @@ mod trim {
     s.prepend_right(2, "X").unwrap();
     s.trim_end(None);
     assert_eq!(s.to_string(), "A X");
+  }
+}
+
+mod transactional_edits {
+  use super::*;
+
+  #[test]
+  fn applies_unsorted_original_byte_edits() {
+    let mut s = MagicString::try_new("πfooXXbarYYbaz").unwrap();
+    s.apply_edits([
+      TextEdit::new("πfooXXbar".len(), "πfooXXbarYY".len(), "-"),
+      TextEdit::new("πfoo".len(), "πfooXX".len(), " "),
+    ])
+    .unwrap();
+    assert_eq!(s.to_string(), "πfoo bar-baz");
+  }
+
+  #[test]
+  fn rejects_overlap_without_mutating() {
+    let mut s = MagicString::new("abcdefgh");
+    let before = s.to_string();
+    let err = s.apply_edits([TextEdit::new(1, 5, "X"), TextEdit::new(4, 7, "Y")]).unwrap_err();
+    assert!(err.contains("overlapping edit range"), "unexpected error: {err}");
+    assert_eq!(s.to_string(), before);
+  }
+
+  #[test]
+  fn rejects_non_utf8_boundary_without_mutating() {
+    let mut s = MagicString::new("πx");
+    let before = s.to_string();
+    let err = s.apply_edits([TextEdit::new(1, 2, "y")]).unwrap_err();
+    assert!(err.contains("UTF-8 character boundaries"), "unexpected error: {err}");
+    assert_eq!(s.to_string(), before);
+  }
+
+  #[test]
+  fn update_failure_rolls_back_the_whole_batch() {
+    let mut s = MagicString::new("abcdef");
+    s.relocate(0, 2, 4).unwrap();
+    let before = s.to_string();
+
+    // The first edit is valid. The second crosses a split point introduced by
+    // the earlier relocation and fails inside `update_with`. `apply_edits`
+    // stages both edits on a clone, so neither becomes observable.
+    let err = s.apply_edits([TextEdit::new(0, 1, "A"), TextEdit::new(1, 5, "B")]).unwrap_err();
+    assert!(err.contains("split point"), "unexpected error: {err}");
+    assert_eq!(s.to_string(), before);
   }
 }

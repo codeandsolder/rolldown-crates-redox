@@ -59,16 +59,25 @@ impl Default for MagicString<'_> {
 
 impl<'text> MagicString<'text> {
   pub fn new(source: impl Into<Cow<'text, str>>) -> Self {
-    Self::with_options(source, Default::default())
+    Self::try_new(source).expect("MagicString does not support sources larger than 4GB")
+  }
+
+  pub fn try_new(source: impl Into<Cow<'text, str>>) -> Result<Self, String> {
+    Self::try_with_options(source, Default::default())
   }
 
   pub fn with_options(source: impl Into<Cow<'text, str>>, options: MagicStringOptions) -> Self {
+    Self::try_with_options(source, options)
+      .expect("MagicString does not support sources larger than 4GB")
+  }
+
+  pub fn try_with_options(
+    source: impl Into<Cow<'text, str>>,
+    options: MagicStringOptions,
+  ) -> Result<Self, String> {
     let source = source.into();
-    debug_assert!(
-      source.len() <= u32::MAX as usize,
-      "MagicString does not support sources larger than 4GB"
-    );
-    let source_len = source.len() as u32;
+    let source_len = u32::try_from(source.len())
+      .map_err(|_| "MagicString does not support sources larger than 4GB".to_string())?;
     let initial_chunk = Chunk::new(Span(0, source_len));
     let mut chunks = IndexChunks::with_capacity(1);
     let initial_chunk_idx = chunks.push(initial_chunk);
@@ -91,7 +100,7 @@ impl<'text> MagicString<'text> {
     magic_string.chunk_by_start.insert(0, initial_chunk_idx);
     magic_string.chunk_by_end.insert(source_len, initial_chunk_idx);
 
-    magic_string
+    Ok(magic_string)
   }
 
   pub fn source(&self) -> &str {
@@ -280,6 +289,7 @@ impl<'text> MagicString<'text> {
   }
 
   /// Stored names in `names`-array order, paired with their index.
+  #[cfg(feature = "sourcemap")]
   pub(super) fn stored_names_ordered(&self) -> Vec<(&str, u32)> {
     let mut ordered: Vec<(&str, u32)> =
       self.stored_names.iter().map(|(name, &id)| (name.as_str(), id)).collect();
