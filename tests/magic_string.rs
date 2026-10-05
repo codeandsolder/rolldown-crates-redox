@@ -1,0 +1,553 @@
+use std::borrow::Cow;
+
+use string_wizard::IndentOptions;
+use string_wizard::MagicString;
+use string_wizard::MagicStringOptions;
+use string_wizard::UpdateOptions;
+
+trait MagicStringExt<'text> {
+  fn overwrite(&mut self, start: u32, end: u32, content: impl Into<Cow<'text, str>>) -> &mut Self;
+
+  fn indent_str(&mut self, indent_str: &str) -> &mut Self;
+}
+
+impl<'text> MagicStringExt<'text> for MagicString<'text> {
+  fn overwrite(&mut self, start: u32, end: u32, content: impl Into<Cow<'text, str>>) -> &mut Self {
+    self
+      .update_with(start, end, content, UpdateOptions { overwrite: true, ..Default::default() })
+      .unwrap()
+  }
+  /// Shortcut for `indent_with(IndentOptions { indent_str: Some(indent_str), ..Default::default() })`
+  fn indent_str(&mut self, indent_str: &str) -> &mut Self {
+    self.indent_with(IndentOptions { indentor: Some(indent_str), ..Default::default() }).unwrap()
+  }
+}
+
+mod options {
+  use super::*;
+  #[test]
+  fn stores_source_file_information() {
+    let s = MagicString::with_options(
+      "abc",
+      MagicStringOptions { filename: Some("foo.js".to_string()), ..Default::default() },
+    );
+    assert_eq!(s.filename(), Some("foo.js"))
+  }
+}
+
+mod append {
+  use super::*;
+
+  #[test]
+  fn should_append_content() {
+    // should append content
+    let mut s = MagicString::new("abcdefghijkl");
+    s.append("xyz");
+    assert_eq!(s.to_string(), "abcdefghijklxyz");
+    s.append("xyz");
+    assert_eq!(s.to_string(), "abcdefghijklxyzxyz");
+  }
+}
+
+mod prepend_append_left_right {
+  use super::*;
+
+  #[test]
+  fn preserves_intended_order() {
+    let mut s = MagicString::new("0123456789");
+    s.append_left(5, "A").unwrap();
+    assert_eq!(s.to_string(), "01234A56789");
+    s.prepend_right(5, "a").unwrap();
+    s.prepend_right(5, "b").unwrap();
+    s.append_left(5, "B").unwrap();
+    s.append_left(5, "C").unwrap();
+    s.prepend_right(5, "c").unwrap();
+
+    assert_eq!(s.to_string(), "01234ABCcba56789");
+
+    s.prepend_left(5, "<").unwrap();
+    s.prepend_left(5, "{").unwrap();
+    assert_eq!(s.to_string(), "01234{<ABCcba56789");
+
+    s.append_right(5, ">").unwrap();
+    s.append_right(5, "}").unwrap();
+    assert_eq!(s.to_string(), "01234{<ABCcba>}56789");
+
+    s.append_left(5, "(").unwrap();
+    s.append_left(5, "[").unwrap();
+    assert_eq!(s.to_string(), "01234{<ABC([cba>}56789");
+
+    s.prepend_right(5, ")").unwrap();
+    s.prepend_right(5, "]").unwrap();
+    assert_eq!(s.to_string(), "01234{<ABC([])cba>}56789");
+  }
+
+  #[test]
+  fn preserves_intended_order_at_beginning_of_string() {
+    let mut s = MagicString::new("x");
+    s.append_left(0, "1").unwrap();
+    s.prepend_left(0, "2").unwrap();
+    s.append_left(0, "3").unwrap();
+    s.prepend_left(0, "4").unwrap();
+
+    assert_eq!(s.to_string(), "4213x");
+  }
+
+  #[test]
+  fn preserves_intended_order_at_end_of_string() {
+    let mut s = MagicString::new("x");
+    s.append_right(1, "1").unwrap();
+    s.prepend_right(1, "2").unwrap();
+    s.append_right(1, "3").unwrap();
+    s.prepend_right(1, "4").unwrap();
+
+    assert_eq!(s.to_string(), "x4213");
+  }
+}
+
+mod clone {
+  use super::*;
+
+  #[test]
+  fn should_clone_a_magic_string() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.overwrite(3, 9, "XYZ");
+    let c = s.clone();
+
+    assert_eq!(c.to_string(), "abcXYZjkl")
+  }
+}
+
+mod overwrite {
+  use super::*;
+
+  #[test]
+  fn should_replace_characters() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.overwrite(5, 8, "FGH");
+    assert_eq!(s.to_string(), "abcdeFGHijkl");
+  }
+
+  // #[test]
+  // fn should_throw_an_error_if_overlapping_replacements_are_attempted() {
+  //     let mut s = MagicString::new("abcdefghijkl");
+  //     s.overwrite(7, 11, "xx");
+  //     assert!(std::panic::catch_unwind(|| {
+  //         s.clone().overwrite(8, 12, "yy");
+  //     })
+  //     .is_err())
+  // }
+}
+
+mod relocate {
+  use super::*;
+
+  #[test]
+  fn moves_content_from_the_start() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(0, 3, 6).unwrap();
+    assert_eq!(s.to_string(), "defabcghijkl");
+  }
+
+  #[test]
+  fn moves_content_to_the_start() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(3, 6, 0).unwrap();
+    assert_eq!(s.to_string(), "defabcghijkl");
+  }
+
+  #[test]
+  fn moves_content_from_the_end() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(9, 12, 6).unwrap();
+    assert_eq!(s.to_string(), "abcdefjklghi");
+  }
+
+  #[test]
+  fn moves_content_to_the_end() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(6, 9, 12).unwrap();
+    assert_eq!(s.to_string(), "abcdefjklghi");
+  }
+
+  #[test]
+  fn ignores_redundant_move() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.prepend_right(9, "X")
+      .unwrap()
+      .relocate(9, 12, 6)
+      .unwrap()
+      .append_left(12, "Y")
+      .unwrap()
+      // this is redundant – [6,9] is already after [9,12]
+      .relocate(6, 9, 12)
+      .unwrap();
+
+    assert_eq!(s.to_string(), "abcdefXjklYghi");
+  }
+
+  #[test]
+  fn moves_content_to_the_middle() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(3, 6, 9).unwrap();
+    assert_eq!(s.to_string(), "abcghidefjkl");
+  }
+
+  #[test]
+  fn handles_multiple_moves_of_the_same_snippet() {
+    let mut s = MagicString::new("abcdefghijkl");
+
+    s.relocate(0, 3, 6).unwrap();
+    assert_eq!(s.to_string(), "defabcghijkl");
+
+    s.relocate(0, 3, 9).unwrap();
+    assert_eq!(s.to_string(), "defghiabcjkl");
+  }
+
+  #[test]
+  fn handles_moves_of_adjacent_snippets() {
+    let mut s = MagicString::new("abcdefghijkl");
+
+    s.relocate(0, 2, 6).unwrap();
+    assert_eq!(s.to_string(), "cdefabghijkl");
+    s.relocate(2, 4, 6).unwrap();
+    assert_eq!(s.to_string(), "efabcdghijkl");
+  }
+
+  #[test]
+  fn handles_moves_to_same_index() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(0, 2, 6).unwrap().relocate(3, 5, 6).unwrap();
+    assert_eq!(s.to_string(), "cfabdeghijkl");
+  }
+
+  #[test]
+  fn refuses_to_move_a_selection_to_inside_itself() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(3, 6, 3).unwrap_err();
+  }
+  #[test]
+  fn refuses_to_move_a_selection_to_inside_itself2() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(3, 6, 4).unwrap_err();
+  }
+  #[test]
+  fn refuses_to_move_a_selection_to_inside_itself3() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.relocate(3, 6, 6).unwrap_err();
+  }
+
+  #[test]
+  fn allows_edits_of_moved_content() {
+    let mut s1 = MagicString::new("abcdefghijkl");
+    s1.relocate(3, 6, 9).unwrap();
+    s1.overwrite(3, 6, "DEF");
+    assert_eq!(s1.to_string(), "abcghiDEFjkl");
+    let mut s2 = MagicString::new("abcdefghijkl");
+    s2.relocate(3, 6, 9).unwrap();
+    s2.overwrite(4, 5, "E");
+    assert_eq!(s2.to_string(), "abcghidEfjkl");
+  }
+
+  #[test]
+  fn moves_content_inserted_at_end_of_range() {
+    let mut s = MagicString::new("abcdefghijkl");
+    s.append_left(6, "X").unwrap().relocate(3, 6, 9).unwrap();
+    assert_eq!(s.to_string(), "abcghidefXjkl");
+  }
+
+  #[test]
+  fn errors_without_corrupting_the_list_when_the_range_is_not_contiguous() {
+    let mut s = MagicString::new("abc");
+    // Reorders the chunks to B -> A -> C.
+    s.relocate(0, 1, 2).unwrap();
+    assert_eq!(s.to_string(), "bac");
+
+    // [1,3) is B..C, which is no longer a contiguous run, so the move has to be rejected.
+    s.relocate(1, 3, 0).unwrap_err();
+
+    // The rejected move must not have rewired anything: a half-applied move used to leave a
+    // chunk pointing at itself, and this `to_string` would then never return.
+    assert_eq!(s.to_string(), "bac");
+  }
+
+  #[test]
+  fn errors_when_the_range_endpoints_have_swapped_list_positions() {
+    let mut s = MagicString::new("abc");
+    // Reorders the chunks to C -> A -> B.
+    s.relocate(0, 2, 3).unwrap();
+    assert_eq!(s.to_string(), "cab");
+
+    // [1,3) selects first = B (the list tail) and last = C (the head): both endpoints have a
+    // neighbor, so an endpoint-only check passes, but A is wedged between them. Accepting the
+    // move rewired A to point at itself and `to_string` never returned.
+    let err = s.relocate(1, 3, 0).unwrap_err();
+    assert!(err.contains("non-contiguous"), "unexpected error: {err}");
+    assert_eq!(s.to_string(), "cab");
+  }
+
+  #[test]
+  fn errors_when_the_range_is_broken_mid_list() {
+    let mut s = MagicString::new("abcd");
+    // Reorders the chunks to A -> C -> D -> B.
+    s.relocate(1, 2, 4).unwrap();
+    assert_eq!(s.to_string(), "acdb");
+
+    // [1,3) is B..C with the break mid-list. Accepting the move silently produced "b" —
+    // no hang, just wrong output plus orphaned chunk cycles.
+    s.relocate(1, 3, 0).unwrap_err();
+    assert_eq!(s.to_string(), "acdb");
+  }
+
+  #[test]
+  fn zero_width_relocate_is_a_noop() {
+    // Needs no earlier move: on a pristine string the chunk ending at `start` sits *before*
+    // the chunk starting at `start`, so treating them as a range self-cycled two chunks and
+    // this printed "a".
+    let mut s = MagicString::new("abc");
+    s.relocate(1, 1, 3).unwrap();
+    assert_eq!(s.to_string(), "abc");
+  }
+
+  #[test]
+  fn zero_width_relocate_to_its_own_position_still_errors() {
+    // The one zero-width case that is not a no-op: the containment guard runs first, so
+    // `relocate(n, n, n)` keeps the same "inside itself" error as magic-string and as this
+    // method before the zero-width no-op existed.
+    let mut s = MagicString::new("abc");
+    let err = s.relocate(1, 1, 1).unwrap_err();
+    assert!(err.contains("inside itself"), "unexpected error: {err}");
+    assert_eq!(s.to_string(), "abc");
+  }
+
+  #[test]
+  fn moving_a_chunk_to_the_slot_it_already_occupies_is_a_noop() {
+    let mut s = MagicString::new("abcdef");
+    // Reorders the chunks to A -> E -> B -> C -> D -> F.
+    s.relocate(4, 5, 1).unwrap();
+    assert_eq!(s.to_string(), "aebcdf");
+
+    // E already sits right before original position 1, so there is nothing to do. The splice
+    // used to link E to itself and drop it from the list, printing "abcdf".
+    s.relocate(4, 5, 1).unwrap();
+    assert_eq!(s.to_string(), "aebcdf");
+  }
+
+  #[test]
+  fn rejects_inverted_and_out_of_bounds_ranges() {
+    let mut s = MagicString::new("abc");
+    // Both used to panic indexing `chunk_by_start`/`chunk_by_end` with a position no chunk
+    // has, since `split_at` silently ignores out-of-range indices.
+    s.relocate(2, 1, 3).unwrap_err();
+    s.relocate(1, 99, 0).unwrap_err();
+    assert_eq!(s.to_string(), "abc");
+  }
+}
+
+mod indent {
+  use string_wizard::IndentOptions;
+
+  use super::*;
+
+  #[test]
+  fn should_indent_content_with_a_single_tab_character_by_default() {
+    let mut s = MagicString::new("abc\ndef\nghi\njkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\tabc\n\tdef\n\tghi\n\tjkl")
+  }
+
+  #[test]
+  fn should_indent_content_with_a_single_tab_character_by_default2() {
+    let mut s = MagicString::new("");
+    s.prepend("abc\ndef\nghi\njkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\tabc\n\tdef\n\tghi\n\tjkl");
+    let mut s = MagicString::new("");
+    s.prepend("abc\ndef");
+    s.append("\nghi\njkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\tabc\n\tdef\n\tghi\n\tjkl")
+  }
+
+  #[test]
+  fn should_indent_content_using_existing_indentation_as_a_guide() {
+    let mut s = MagicString::new("abc\n  def\n    ghi\n  jkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "  abc\n    def\n      ghi\n    jkl");
+
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "    abc\n      def\n        ghi\n      jkl");
+  }
+
+  #[test]
+  fn should_disregard_single_space_indentation_when_auto_indenting() {
+    let mut s = MagicString::new("abc\n/**\n *comment\n */");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\tabc\n\t/**\n\t *comment\n\t */");
+  }
+
+  #[test]
+  fn should_indent_content_using_the_supplied_indent_string() {
+    let mut s = MagicString::new("abc\ndef\nghi\njkl");
+    s.indent_str("  ");
+    assert_eq!(s.to_string(), "  abc\n  def\n  ghi\n  jkl");
+    s.indent_str(">>");
+    assert_eq!(s.to_string(), ">>  abc\n>>  def\n>>  ghi\n>>  jkl");
+  }
+
+  #[test]
+  fn should_indent_content_using_the_empty_string_if_specified() {
+    // should indent content using the empty string if specified (i.e. noop)
+    let mut s = MagicString::new("abc\ndef\nghi\njkl");
+    s.indent_str("");
+    assert_eq!(s.to_string(), "abc\ndef\nghi\njkl");
+  }
+  #[test]
+  fn should_prevent_excluded_characters_from_being_indented() {
+    let mut s = MagicString::new("abc\ndef\nghi\njkl");
+    s.indent_with(IndentOptions { indentor: Some("  "), exclude: &[(7, 15)] }).unwrap();
+    assert_eq!(s.to_string(), "  abc\n  def\nghi\njkl");
+    s.indent_with(IndentOptions { indentor: Some(">>"), exclude: &[(7, 15)] }).unwrap();
+    assert_eq!(s.to_string(), ">>  abc\n>>  def\nghi\njkl");
+  }
+
+  #[test]
+  fn excludes_edited_chunks_by_their_own_start() {
+    // Two adjacent edited chunks; only the first is excluded.
+    let mut s = MagicString::new("AB");
+    s.overwrite(0, 1, "x\n");
+    s.overwrite(1, 2, "y\n");
+    s.indent_with(IndentOptions { indentor: Some("  "), exclude: &[(0, 1)] }).unwrap();
+    assert_eq!(s.to_string(), "x\n  y\n");
+  }
+
+  #[test]
+  fn should_not_add_characters_to_empty_lines() {
+    // should indent content using the empty string if specified (i.e. noop)
+    let mut s = MagicString::new("\n\nabc\ndef\n\nghi\njkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\n\n\tabc\n\tdef\n\n\tghi\n\tjkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\n\n\t\tabc\n\t\tdef\n\n\t\tghi\n\t\tjkl");
+  }
+
+  #[test]
+  fn should_not_add_characters_to_empty_lines_even_on_windows() {
+    // should indent content using the empty string if specified (i.e. noop)
+    let mut s = MagicString::new("\r\n\r\nabc\r\ndef\r\n\r\nghi\r\njkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\r\n\r\n\tabc\r\n\tdef\r\n\r\n\tghi\r\n\tjkl");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\r\n\r\n\t\tabc\r\n\t\tdef\r\n\r\n\t\tghi\r\n\t\tjkl");
+  }
+
+  #[test]
+  fn should_indent_content_with_removals() {
+    let mut s = MagicString::new("/* remove this line */\nvar foo = 1;");
+    // remove `/* remove this line */\n`
+    s.remove(0, 23).unwrap();
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\tvar foo = 1;");
+  }
+
+  #[test]
+  fn should_not_indent_patches_in_the_middle_of_a_line() {
+    let mut s = MagicString::new("class Foo extends Bar {}");
+    s.overwrite(18, 21, "Baz");
+    assert_eq!(s.to_string(), "class Foo extends Baz {}");
+    s.indent().unwrap();
+    assert_eq!(s.to_string(), "\tclass Foo extends Baz {}");
+  }
+
+  #[test]
+  fn should_ignore_the_end_of_each_exclude_range() {
+    let mut s = MagicString::new("012\n456\n89a\nbcd");
+    s.indent_with(IndentOptions { indentor: Some(">"), exclude: &[(0, 3)] }).unwrap();
+    assert_eq!(s.to_string(), "012\n>456\n>89a\n>bcd");
+  }
+}
+
+mod misc {
+  use super::*;
+
+  #[test]
+  fn should_append_content() {
+    // should append content
+    let mut s = MagicString::new("abcdefghijkl");
+    s.prepend("xyz");
+    assert_eq!(s.to_string(), "xyzabcdefghijkl");
+    s.prepend("xyz");
+    assert_eq!(s.to_string(), "xyzxyzabcdefghijkl");
+  }
+
+  #[test]
+  fn remove() {
+    // should append content
+    let mut s = MagicString::new("0123456");
+    s.remove(0, 3).unwrap();
+    assert_eq!(s.to_string(), "3456");
+    s.remove(3, 7).unwrap();
+    assert_eq!(s.to_string(), "");
+  }
+
+  #[test]
+  fn remove_with_overlapping_ranges() {
+    // Regression test for https://github.com/rolldown/rolldown/issues/8090
+    // When two remove() calls have overlapping ranges, the second call should
+    // still correctly remove its portion of the content.
+    //
+    // "export { Foo, Bar }"
+    //  0       89  12 1417
+    // remove(9, 14) removes "Foo, " → "export { Bar }"
+    // remove(12, 17) removes ", Bar" (overlaps with previous at 12-14)
+    // Expected result: "export {  }" (space at 8 and space at 17)
+    let mut s = MagicString::new("export { Foo, Bar }");
+    s.remove(9, 14).unwrap();
+    assert_eq!(s.to_string(), "export { Bar }");
+    s.remove(12, 17).unwrap();
+    assert_eq!(s.to_string(), "export {  }");
+  }
+
+  #[test]
+  fn allow_empty_input() {
+    let mut s = MagicString::new("");
+    s.append("xyz");
+    assert_eq!(s.to_string(), "xyz");
+    s.prepend("xyz");
+    assert_eq!(s.to_string(), "xyzxyz");
+  }
+
+  #[test]
+  fn has_changed() {
+    let mut s = MagicString::new(" abcde   fghijkl ");
+    assert!(s.clone().prepend("  ").has_changed());
+    assert!(s.clone().overwrite(1, 2, "b").has_changed());
+    assert!(s.clone().remove(1, 6).unwrap().has_changed());
+    s.indent().unwrap();
+    assert!(s.has_changed());
+  }
+}
+
+mod trim {
+  use super::*;
+
+  #[test]
+  fn trim_start_aborts_at_an_emptied_chunks_outro() {
+    // chunk[0,1] is emptied but its outro "X" follows it; the space after is not leading.
+    let mut s = MagicString::new("A B");
+    s.remove(0, 1).unwrap();
+    s.append_left(1, "X").unwrap();
+    s.trim_start(None);
+    assert_eq!(s.to_string(), "X B");
+  }
+
+  #[test]
+  fn trim_end_aborts_at_an_emptied_chunks_intro() {
+    // chunk[2,3] is emptied but its intro "X" precedes it; the space before is not trailing.
+    let mut s = MagicString::new("A B");
+    s.remove(2, 3).unwrap();
+    s.prepend_right(2, "X").unwrap();
+    s.trim_end(None);
+    assert_eq!(s.to_string(), "A X");
+  }
+}
