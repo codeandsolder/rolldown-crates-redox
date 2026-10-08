@@ -25,15 +25,15 @@ pub struct ParseOutcome<'a> {
   pub program: Program<'a>,
   /// Number of parser diagnostics emitted.
   pub diagnostics: usize,
-  /// Whether Oxc reported an internal parser panic.
-  pub panicked: bool,
+  /// Whether Oxc reported an internal parser fatal parser error.
+  pub fatal_error: bool,
 }
 
 impl ParseOutcome<'_> {
   /// Returns whether this parse is accepted by the strict parser policy.
   #[must_use]
   pub const fn is_clean(&self) -> bool {
-    !self.panicked && self.diagnostics == 0
+    !self.fatal_error && self.diagnostics == 0
   }
 }
 
@@ -48,11 +48,11 @@ pub fn parse_program<'a>(
   ParseOutcome {
     program: parsed.program,
     diagnostics: parsed.diagnostics.len(),
-    panicked: parsed.panicked,
+    fatal_error: parsed.fatal_error,
   }
 }
 
-/// Parse a program only when Oxc reports neither diagnostics nor a panic.
+/// Parse a program only when Oxc reports neither diagnostics nor a fatal parser error.
 #[must_use]
 pub fn parse_program_strict<'a>(
   allocator: &'a Allocator,
@@ -67,7 +67,7 @@ pub fn parse_program_strict<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParseFailure {
   diagnostics: usize,
-  panicked: bool,
+  fatal_error: bool,
 }
 
 impl ParseFailure {
@@ -77,10 +77,10 @@ impl ParseFailure {
     self.diagnostics
   }
 
-  /// Whether Oxc reported an internal parser panic.
+  /// Whether Oxc reported an internal parser fatal parser error.
   #[must_use]
-  pub const fn panicked(self) -> bool {
-    self.panicked
+  pub const fn fatal_error(self) -> bool {
+    self.fatal_error
   }
 }
 
@@ -88,8 +88,8 @@ impl fmt::Display for ParseFailure {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
       formatter,
-      "ECMAScript parse rejected: {} diagnostic(s), panicked={}",
-      self.diagnostics, self.panicked
+      "ECMAScript parse rejected: {} diagnostic(s), fatal_error={}",
+      self.diagnostics, self.fatal_error
     )
   }
 }
@@ -131,10 +131,10 @@ impl fmt::Debug for OwnedProgram {
 }
 
 impl OwnedProgram {
-  /// Parse and own a program under the strict no-diagnostics/no-panic policy.
+  /// Parse and own a program under the strict no-diagnostics/no-fatal parser error policy.
   ///
   /// # Errors
-  /// Returns [`ParseFailure`] when Oxc emits diagnostics or reports a parser panic.
+  /// Returns [`ParseFailure`] when Oxc emits diagnostics or reports a parser fatal parser error.
   pub fn parse(source: impl Into<Arc<str>>, source_type: SourceType) -> Result<Self, ParseFailure> {
     let source = source.into();
     let allocator = Allocator::default();
@@ -143,7 +143,7 @@ impl OwnedProgram {
       if parsed.is_clean() {
         Ok(ProgramDependent { program: parsed.program })
       } else {
-        Err(ParseFailure { diagnostics: parsed.diagnostics, panicked: parsed.panicked })
+        Err(ParseFailure { diagnostics: parsed.diagnostics, fatal_error: parsed.fatal_error })
       }
     })?;
     Ok(Self { cell, source_type })
@@ -209,7 +209,7 @@ mod tests {
     let failure = OwnedProgram::parse("const =", SourceType::cjs());
     assert!(failure.is_err());
     if let Err(error) = failure {
-      assert!(error.panicked() || error.diagnostics() > 0);
+      assert!(error.fatal_error() || error.diagnostics() > 0);
     }
   }
 }
