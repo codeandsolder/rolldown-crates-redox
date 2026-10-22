@@ -13,6 +13,8 @@ const SPECIAL_PARAMS: [&str; 4] = ["raw", "sharedworker", "url", "worker"];
 pub enum DynamicImportGlobError {
   /// The source already contains `*`, which would be ambiguous with introduced wildcards.
   LiteralWildcard,
+  /// A JavaScript string literal contains a lone UTF-16 surrogate and cannot be represented as Rust UTF-8.
+  LoneSurrogateLiteral,
   /// A binary expression used an operator other than string-concatenating `+`.
   UnsupportedOperator(String),
   /// The static part does not prove a relative `./` or `../` import.
@@ -25,6 +27,9 @@ impl fmt::Display for DynamicImportGlobError {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::LiteralWildcard => formatter.write_str("dynamic import contains a literal '*'"),
+      Self::LoneSurrogateLiteral => {
+        formatter.write_str("dynamic import contains a lone UTF-16 surrogate")
+      }
       Self::UnsupportedOperator(operator) => {
         write!(formatter, "dynamic import operator {operator:?} is not supported")
       }
@@ -91,7 +96,10 @@ fn expr_to_glob(expression: &Expression<'_>) -> Result<String, DynamicImportGlob
     Expression::TemplateLiteral(template) => template_literal_to_glob(template),
     Expression::CallExpression(call) => call_expression_to_glob(call),
     Expression::BinaryExpression(binary) => binary_expression_to_glob(binary),
-    Expression::StringLiteral(literal) => sanitize_string(&literal.value),
+    Expression::StringLiteral(literal) => {
+      let value = literal.value.as_str().ok_or(DynamicImportGlobError::LoneSurrogateLiteral)?;
+      sanitize_string(value)
+    }
     _ => Ok("*".to_string()),
   }
 }
@@ -183,6 +191,16 @@ mod tests {
     let allocator = Allocator::default();
     let expression = parse_expression(&allocator, source)?;
     Ok(dynamic_import_to_glob(&expression)?)
+  }
+
+  #[test]
+  fn rejects_lone_surrogate_string_literal() {
+    assert!(matches!(
+      pattern(r#""./foo/\uD800.js" + suffix"#),
+      Err(error)
+        if error.downcast_ref::<DynamicImportGlobError>()
+          == Some(&DynamicImportGlobError::LoneSurrogateLiteral)
+    ));
   }
 
   #[test]
