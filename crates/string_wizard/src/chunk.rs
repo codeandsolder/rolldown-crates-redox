@@ -136,10 +136,11 @@ impl<'str> Chunk<'str> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use super::ChunkIdx;
+  use std::mem::size_of;
 
   #[test]
   fn optional_chunk_index_stays_compact() {
-    assert_eq!(std::mem::size_of::<Option<ChunkIdx>>(), std::mem::size_of::<u32>());
+    assert_eq!(size_of::<Option<ChunkIdx>>(), size_of::<u32>());
   }
 }
