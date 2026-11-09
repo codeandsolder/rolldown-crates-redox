@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   strict-rust:
-    uses: codeandsolder/rust-skills2/.github/workflows/strict-rust.yml@d3fd9e6bfeee2d9a12c90ea17ed6c650b39fad9f # main
+    uses: codeandsolder/rust-skills2/.github/workflows/strict-rust.yml@2e3e7dfc5742132bbae83ae7527a8549cd87d4f3 # main
     with:
       cargo-args: "--locked --workspace --lib --all-features"
 
@@ -27,10 +27,10 @@ jobs:
         with:
           toolchain: "1.99.1"
       - name: Setup mandatory sccache
-        uses: codeandsolder/ci-workflows/.github/actions/setup-sccache@23b86d2eeed31f7893c34e942c32cf6555299dbb # main
+        uses: codeandsolder/ci-workflows/.github/actions/setup-sccache@0188eacbbff0836d0b5eca53b6cad4355adecd9e # main
         with:
           rust-toolchain: "1.99.1"
       - run: cargo +1.99.1 test --locked --workspace --all-features
       - name: Finalize mandatory sccache
         if: always()
-        uses: codeandsolder/ci-workflows/.github/actions/finalize-sccache@23b86d2eeed31f7893c34e942c32cf6555299dbb # main
+        uses: codeandsolder/ci-workflows/.github/actions/finalize-sccache@0188eacbbff0836d0b5eca53b6cad4355adecd9e # main
