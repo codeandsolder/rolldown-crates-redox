@@ -9,7 +9,7 @@ members = [
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/codeandsolder/rolldown-crates-redox"
-rust-version = "1.99.0"
+rust-version = "1.99.1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
