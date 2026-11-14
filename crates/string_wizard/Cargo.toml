@@ -10,7 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 memchr = "2.8.2"
-oxc_sourcemap = { version = "9.0.0", optional = true }
+oxc_sourcemap = { version = "10.0.0", optional = true }
 regex = { version = "1.13.0", default-features = false, features = ["std", "perf", "unicode-perl", "unicode-case"] }
 rustc-hash = "2.1.3"
 
