@@ -13,7 +13,7 @@ fn map(source: &str, content: &str, dst_line: u32, src_line: u32) -> SourceMap {
     None,
     vec![],
     None,
-    vec![Cow::Owned(source.to_string())],
+    vec![Some(Cow::Owned(source.to_string()))],
     vec![Some(Cow::Owned(content.to_string()))],
     vec![Token::new(dst_line, 0, src_line, 0, Some(0), None)].into_boxed_slice(),
     None,
@@ -27,7 +27,7 @@ fn collapse_empty_and_single_are_total() {
 
   let one = map("original.js", "const x = 1;", 0, 0);
   let collapsed = collapse_sourcemaps(&[&one]);
-  assert_eq!(collapsed.get_sources().collect::<Vec<_>>(), ["original.js"]);
+  assert_eq!(collapsed.get_sources().collect::<Vec<_>>(), [Some("original.js")]);
   assert_eq!(collapsed.get_source_content(0), Some("const x = 1;"));
 }
 
@@ -39,7 +39,7 @@ fn collapse_traces_through_an_intermediate_map() -> Result<(), &'static str> {
   let collapsed = collapse_sourcemaps(&[&original_to_intermediate, &intermediate_to_output]);
   let token = collapsed.get_token(0).ok_or("collapsed map lost its token")?;
 
-  assert_eq!(collapsed.get_sources().collect::<Vec<_>>(), ["original.js"]);
+  assert_eq!(collapsed.get_sources().collect::<Vec<_>>(), [Some("original.js")]);
   assert_eq!(token.get_src_line(), 3);
   assert_eq!(token.get_source_id(), Some(0));
   Ok(())
@@ -51,7 +51,11 @@ fn compose_one_source_preserves_sibling_sources() {
     Some(Cow::Borrowed("bundle.js")),
     vec![Cow::Borrowed("bundle_name")],
     None,
-    vec![Cow::Borrowed("left.js"), Cow::Borrowed("middle.js"), Cow::Borrowed("right.js")],
+    vec![
+      Some(Cow::Borrowed("left.js")),
+      Some(Cow::Borrowed("middle.js")),
+      Some(Cow::Borrowed("right.js")),
+    ],
     vec![Some(Cow::Borrowed("left")), Some(Cow::Borrowed("middle")), Some(Cow::Borrowed("right"))],
     vec![
       Token::new(0, 0, 1, 0, Some(0), None),
@@ -65,7 +69,7 @@ fn compose_one_source_preserves_sibling_sources() {
     None,
     vec![Cow::Borrowed("original_name")],
     None,
-    vec![Cow::Borrowed("middle-a.ts"), Cow::Borrowed("middle-b.ts")],
+    vec![Some(Cow::Borrowed("middle-a.ts")), Some(Cow::Borrowed("middle-b.ts"))],
     vec![Some(Cow::Borrowed("a")), Some(Cow::Borrowed("b"))],
     vec![Token::new(4, 0, 40, 2, Some(1), Some(0))].into_boxed_slice(),
     None,
@@ -74,7 +78,7 @@ fn compose_one_source_preserves_sibling_sources() {
   let composed = compose_sourcemap_source(&downstream, 1, &upstream);
   assert_eq!(
     composed.get_sources().collect::<Vec<_>>(),
-    ["left.js", "middle-a.ts", "middle-b.ts", "right.js"]
+    [Some("left.js"), Some("middle-a.ts"), Some("middle-b.ts"), Some("right.js")]
   );
   let tokens = composed.get_tokens().collect::<Vec<_>>();
   assert_eq!(tokens[0].get_source_id(), Some(0));
@@ -118,7 +122,7 @@ fn joiner_offsets_owned_maps_without_losing_sources() -> Result<(), &'static str
   let joined_map = joined_map.ok_or("mapped inputs produced no source map")?;
 
   assert_eq!(content, "// banner\nfirst();\nsecond();");
-  assert_eq!(joined_map.get_sources().collect::<Vec<_>>(), ["first.js", "second.js"]);
+  assert_eq!(joined_map.get_sources().collect::<Vec<_>>(), [Some("first.js"), Some("second.js")]);
   assert_eq!(joined_map.get_token(0).map(|token| token.get_dst_line()), Some(1));
   assert_eq!(joined_map.get_token(1).map(|token| token.get_dst_line()), Some(2));
   Ok(())
@@ -130,7 +134,7 @@ fn destination_line_adjustment_drops_prefix_tokens() {
     None,
     vec![],
     None,
-    vec![Cow::Borrowed("source.js")],
+    vec![Some(Cow::Borrowed("source.js"))],
     vec![None],
     vec![Token::new(0, 0, 0, 0, Some(0), None), Token::new(2, 0, 2, 0, Some(0), None)]
       .into_boxed_slice(),
