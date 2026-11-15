@@ -111,7 +111,7 @@ pub fn collapse_sourcemaps(sourcemap_chain: &[&oxc_sourcemap::SourceMap<'_>]) ->
     None,
     merged_names,
     None,
-    first_map.get_sources().map(|s| Cow::Owned(s.to_owned())).collect(),
+    first_map.get_sources().map(|s| s.map(|source| Cow::Owned(source.to_owned()))).collect(),
     first_map.get_source_contents().map(|x| x.map(|s| Cow::Owned(s.to_owned()))).collect(),
     tokens,
     None,
@@ -148,12 +148,12 @@ pub fn compose_sourcemap_source(
   let mut contents = Vec::with_capacity(sources.capacity());
   for (index, source) in downstream_sources.iter().enumerate() {
     if index == source_index {
-      sources.extend(upstream_sources.iter().map(|source| Cow::Owned((*source).to_owned())));
+      sources.extend(upstream_sources.iter().map(|source| source.map(|value| Cow::Owned(value.to_owned()))));
       contents.extend(
         upstream_contents.iter().map(|content| content.map(|value| Cow::Owned(value.to_owned()))),
       );
     } else {
-      sources.push(Cow::Owned((*source).to_owned()));
+      sources.push(source.map(|value| Cow::Owned(value.to_owned())));
       contents.push(
         downstream_contents.get(index).copied().flatten().map(|value| Cow::Owned(value.to_owned())),
       );
