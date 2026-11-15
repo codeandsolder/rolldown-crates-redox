@@ -51,7 +51,11 @@ fn compose_one_source_preserves_sibling_sources() {
     Some(Cow::Borrowed("bundle.js")),
     vec![Cow::Borrowed("bundle_name")],
     None,
-    vec![Some(Cow::Borrowed("left.js")), Some(Cow::Borrowed("middle.js")), Some(Cow::Borrowed("right.js"))],
+    vec![
+      Some(Cow::Borrowed("left.js")),
+      Some(Cow::Borrowed("middle.js")),
+      Some(Cow::Borrowed("right.js")),
+    ],
     vec![Some(Cow::Borrowed("left")), Some(Cow::Borrowed("middle")), Some(Cow::Borrowed("right"))],
     vec![
       Token::new(0, 0, 1, 0, Some(0), None),

@@ -148,7 +148,9 @@ pub fn compose_sourcemap_source(
   let mut contents = Vec::with_capacity(sources.capacity());
   for (index, source) in downstream_sources.iter().enumerate() {
     if index == source_index {
-      sources.extend(upstream_sources.iter().map(|source| source.map(|value| Cow::Owned(value.to_owned()))));
+      sources.extend(
+        upstream_sources.iter().map(|source| source.map(|value| Cow::Owned(value.to_owned()))),
+      );
       contents.extend(
         upstream_contents.iter().map(|content| content.map(|value| Cow::Owned(value.to_owned()))),
       );
