@@ -15,6 +15,22 @@
       ],
       "groupName": "Rust toolchain",
       "automerge": false
+    },
+    {
+      "description": "Update crates sharing version-specific Rust types together",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "oxc_allocator",
+        "oxc_ast",
+        "oxc_parser",
+        "oxc_span",
+        "oxc_syntax"
+      ],
+      "groupName": "Oxc core crates",
+      "groupSlug": "oxc-core-crates",
+      "automerge": false
     }
   ],
   "customManagers": [
