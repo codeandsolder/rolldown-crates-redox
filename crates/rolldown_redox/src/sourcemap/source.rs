@@ -46,12 +46,12 @@ pub struct SourceMapSource {
 }
 
 impl SourceMapSource {
-  #[must_use]
+  #[must_use = "the returned source contains the text and mapping"]
   pub const fn new(content: String, sourcemap: SourceMap) -> Self {
     Self { content, sourcemap: Some(sourcemap), pre_computed_lines_count: None }
   }
 
-  #[must_use]
+  #[must_use = "the modified source is returned rather than updating caller state"]
   pub fn with_pre_compute_sourcemap_data(mut self, pre_compute: bool) -> Self {
     if pre_compute {
       self.pre_computed_lines_count = Some(lines_count(&self.content));

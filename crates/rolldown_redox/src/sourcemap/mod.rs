@@ -22,7 +22,7 @@ pub use self::source::{Source, SourceMapSource};
 /// Reuses the map's existing allocations: strings are moved, and the token buffer is mutated
 /// in place unless tokens have to be dropped (only when some token maps into the stripped
 /// prefix, which rolldown's own maps never do — prepended text carries no tokens).
-#[must_use]
+#[must_use = "the adjusted source map is returned rather than mutating the original mapping"]
 pub fn adjust_sourcemap_dst_lines(sourcemap: SourceMap, lines: u32) -> SourceMap {
   if lines == 0 {
     return sourcemap;
@@ -54,7 +54,7 @@ pub fn adjust_sourcemap_dst_lines(sourcemap: SourceMap, lines: u32) -> SourceMap
 }
 
 /// Builds an empty sourcemap with no tokens, sources, names, or contents.
-#[must_use]
+#[must_use = "the returned source map represents an empty mapping"]
 pub fn empty_sourcemap() -> SourceMap {
   SourceMap::new(None, vec![], None, vec![], vec![], Box::new([]), None)
 }
@@ -64,7 +64,7 @@ pub fn empty_sourcemap() -> SourceMap {
 // Input maps may borrow their strings (e.g. a codegen map borrowing the source it was
 // printed from) — the output is always owned, since it copies every string it keeps.
 // This lets callers collapse a freshly generated map without `into_owned`-ing it first.
-#[must_use]
+#[must_use = "the returned source map combines the supplied mapping chain"]
 pub fn collapse_sourcemaps(sourcemap_chain: &[&oxc_sourcemap::SourceMap<'_>]) -> SourceMap {
   let Some(first_map) = sourcemap_chain.first() else {
     return empty_sourcemap();
@@ -127,7 +127,7 @@ pub fn collapse_sourcemaps(sourcemap_chain: &[&oxc_sourcemap::SourceMap<'_>]) ->
 /// Both maps should have `sourceRoot` resolved into their individual `sources` before calling
 /// this function. A single output `sourceRoot` cannot faithfully describe a map whose sources
 /// came from different roots, so the composed map deliberately clears it.
-#[must_use]
+#[must_use = "the returned source map contains the composed mapping"]
 pub fn compose_sourcemap_source(
   downstream: &oxc_sourcemap::SourceMap<'_>,
   source_id: u32,

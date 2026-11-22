@@ -31,14 +31,14 @@ pub struct ParseOutcome<'a> {
 
 impl ParseOutcome<'_> {
   /// Returns whether this parse is accepted by the strict parser policy.
-  #[must_use]
+  #[must_use = "the returned status indicates whether parsing completed without diagnostics"]
   pub const fn is_clean(&self) -> bool {
     !self.fatal_error && self.diagnostics == 0
   }
 }
 
 /// Parse a program while preserving the parser-health information used by analysis tools.
-#[must_use]
+#[must_use = "the returned parse output contains the allocated syntax tree and diagnostics"]
 pub fn parse_program<'a>(
   allocator: &'a Allocator,
   source: &'a str,
@@ -53,7 +53,7 @@ pub fn parse_program<'a>(
 }
 
 /// Parse a program only when Oxc reports neither diagnostics nor a fatal parser error.
-#[must_use]
+#[must_use = "the returned result indicates whether the syntax is acceptable"]
 pub fn parse_program_strict<'a>(
   allocator: &'a Allocator,
   source: &'a str,
@@ -72,13 +72,13 @@ pub struct ParseFailure {
 
 impl ParseFailure {
   /// Number of parser diagnostics emitted.
-  #[must_use]
+  #[must_use = "the returned count reports parse diagnostics"]
   pub const fn diagnostics(self) -> usize {
     self.diagnostics
   }
 
   /// Whether Oxc reported an internal parser fatal parser error.
-  #[must_use]
+  #[must_use = "the returned status indicates whether parsing could continue"]
   pub const fn fatal_error(self) -> bool {
     self.fatal_error
   }
@@ -150,19 +150,19 @@ impl OwnedProgram {
   }
 
   /// Original source text backing this AST.
-  #[must_use]
+  #[must_use = "the returned text is the source associated with this syntax tree"]
   pub fn source(&self) -> &str {
     &self.cell.borrow_owner().source
   }
 
   /// Oxc source type used for parsing.
-  #[must_use]
+  #[must_use = "the returned source type determines parsing semantics"]
   pub const fn source_type(&self) -> SourceType {
     self.source_type
   }
 
   /// Borrow the parsed program.
-  #[must_use]
+  #[must_use = "the returned syntax tree is the result of parsing"]
   pub fn program(&self) -> &Program<'_> {
     &self.cell.borrow_dependent().program
   }

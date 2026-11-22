@@ -13,12 +13,12 @@ pub struct Joiner<'s> {
 
 impl<'s> Joiner<'s> {
   // --- public
-  #[must_use]
+  #[must_use = "the returned joiner owns the accumulated text"]
   pub fn new() -> Self {
     Self::default()
   }
 
-  #[must_use]
+  #[must_use = "the returned joiner owns the selected options"]
   pub fn with_options(options: JoinerOptions) -> Self {
     Self { separator: options.separator, ..Default::default() }
   }
@@ -33,17 +33,17 @@ impl<'s> Joiner<'s> {
     self
   }
 
-  #[must_use]
+  #[must_use = "the returned length describes the accumulated text"]
   pub fn len(&self) -> usize {
     self.fragments().map(str::len).sum()
   }
 
-  #[must_use]
+  #[must_use = "the returned status indicates whether any text has been accumulated"]
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
 
-  #[must_use]
+  #[must_use = "the joined text is returned rather than modifying caller state"]
   pub fn join(&self) -> String {
     let mut ret = String::with_capacity(self.len());
     self.fragments().for_each(|frag| {
