@@ -46,7 +46,7 @@ impl fmt::Display for DynamicImportGlobError {
 impl Error for DynamicImportGlobError {}
 
 /// Return whether a Vite-style query string selects a non-module resource mode.
-#[must_use]
+#[must_use = "the returned decision determines whether the import query needs special handling"]
 pub fn has_special_dynamic_import_query(query: &str) -> bool {
   if query.len() < 2 || !query.starts_with('?') {
     return false;

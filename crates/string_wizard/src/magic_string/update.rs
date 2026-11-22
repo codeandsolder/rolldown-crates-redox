@@ -37,13 +37,13 @@ impl<'text> TextEdit<'text> {
   ///
   /// Multiple insertions at the same offset preserve their input order when
   /// passed to [`MagicString::apply_edits`].
-  #[must_use]
+  #[must_use = "the returned update describes an insertion to apply"]
   pub fn insert(offset: usize, content: impl Into<Cow<'text, str>>) -> Self {
     Self::new(offset, offset, content)
   }
 
   /// Remove the original-source range `start..end`.
-  #[must_use]
+  #[must_use = "the returned update describes a removal to apply"]
   pub fn remove(start: usize, end: usize) -> Self {
     Self::new(start, end, "")
   }
