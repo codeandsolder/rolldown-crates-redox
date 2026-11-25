@@ -20,7 +20,7 @@ jobs:
 
   tests:
     name: Native nightly tests
-    uses: codeandsolder/ci-workflows/.github/workflows/rust-sccache.yml@83ceff49d93d152cd95a1c9d6addb5cf03169477 # main
+    uses: codeandsolder/ci-workflows/.github/workflows/rust-sccache.yml@7df510a2053e220c010c331b5daef81a593a19bb # main
     with:
       runner: ubuntu-26.04
       command: cargo test --locked --workspace --all-features
