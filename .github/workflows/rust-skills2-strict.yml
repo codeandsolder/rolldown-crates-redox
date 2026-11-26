@@ -2,6 +2,7 @@ name: Strict Rust
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
@@ -24,3 +25,13 @@ jobs:
     with:
       runner: ubuntu-26.04
       command: cargo test --locked --workspace --all-features
+
+  merge-gate:
+    name: Rust CI merge gate
+    if: ${{ always() }}
+    needs: [strict-rust, tests]
+    uses: codeandsolder/ci-workflows/.github/workflows/merge-gate.yml@343303848026ed142e48a6a82e7a889080b99b26 # main
+    with:
+      needs-json: ${{ toJSON(needs) }}
+      expected-results: |
+        [["strict-rust","success"],["tests","success"]]
