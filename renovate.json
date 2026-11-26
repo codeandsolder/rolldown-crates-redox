@@ -18,8 +18,7 @@
         "oxc_syntax"
       ],
       "groupName": "Oxc core crates",
-      "groupSlug": "oxc-core-crates",
-      "automerge": false
+      "groupSlug": "oxc-core-crates"
     }
   ]
 }
