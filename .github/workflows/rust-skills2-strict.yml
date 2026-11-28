@@ -15,13 +15,13 @@ permissions:
 
 jobs:
   strict-rust:
-    uses: codeandsolder/rust-skills2/.github/workflows/strict-rust.yml@cb9083676196a8ec3bf013e7253907b2759020c7 # main
+    uses: codeandsolder/rust-skills2/.github/workflows/strict-rust.yml@4f29271a2aa27bef1f34bd70407b0db3d39904a9 # main
     with:
       cargo-args: "--locked --workspace --lib --all-features"
 
   tests:
     name: Native nightly tests
-    uses: codeandsolder/ci-workflows/.github/workflows/rust-sccache.yml@9c14ef2d72423958c56944febc620ec50f01d65a # main
+    uses: codeandsolder/ci-workflows/.github/workflows/rust-sccache.yml@5991b873ab28ec8fae36c2c8ef944a3f67f5f9b3 # main
     with:
       runner: ubuntu-26.04
       command: cargo test --locked --workspace --all-features
@@ -30,7 +30,7 @@ jobs:
     name: Rust CI merge gate
     if: ${{ always() }}
     needs: [strict-rust, tests]
-    uses: codeandsolder/ci-workflows/.github/workflows/merge-gate.yml@9c14ef2d72423958c56944febc620ec50f01d65a # main
+    uses: codeandsolder/ci-workflows/.github/workflows/merge-gate.yml@5991b873ab28ec8fae36c2c8ef944a3f67f5f9b3 # main
     with:
       needs-json: ${{ toJSON(needs) }}
       expected-results: |
